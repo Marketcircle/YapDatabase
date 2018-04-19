@@ -67,9 +67,12 @@
 		parent = inParent;
 		databaseConnection = inDbConnection;
 		
-		edgeCache = [[YapCache alloc] initWithCountLimit:500];
-		edgeCache.allowedKeyClasses = [NSSet setWithObject:[NSNumber class]];
-		edgeCache.allowedObjectClasses = [NSSet setWithObject:[YapDatabaseRelationshipEdge class]];
+// Sometimes the edges in the edge cache become stale, and when a stale edge is updated with a different srcRowID or destinationRowID
+// by YapDatabaseRelationshipTransaction then it becomes inconsistent, which can cause the wrong rules to fire. To resolve this I'm
+// disabling the edge cache since it doesn't do much anyway.
+//        edgeCache = [[YapCache alloc] initWithCountLimit:500];
+//        edgeCache.allowedKeyClasses = [NSSet setWithObject:[NSNumber class]];
+//        edgeCache.allowedObjectClasses = [NSSet setWithObject:[YapDatabaseRelationshipEdge class]];
 		
 		sharedKeySetForInternalChangeset = [NSDictionary sharedKeySetForKeys:[self internalChangesetKeys]];
 	}

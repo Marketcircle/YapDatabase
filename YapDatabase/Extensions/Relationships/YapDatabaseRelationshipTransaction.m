@@ -3591,7 +3591,8 @@ NS_INLINE BOOL URLMatchesURL(NSURL *url1, NSURL *url2)
 						{
 							// Notify the destination node
 							
-							if (edge->sourceKey == nil)
+                            // NOTE This used to read edge->sourceKey, but that seemed like a mistake.
+							if (edge->destinationKey == nil)
 							{
 								edge->destinationKey = src.key;
 								edge->destinationCollection = src.collection;
