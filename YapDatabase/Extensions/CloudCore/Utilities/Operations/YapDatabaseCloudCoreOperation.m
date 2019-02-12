@@ -43,9 +43,14 @@ NSString *const YDBCloudCoreOperationIsReadyToStartNotification = @"YDBCloudCore
 
 @synthesize pendingStatus = pendingStatus;
 
+@dynamic pendingStatusIsCompletedOrSkipped;
+@dynamic pendingStatusIsCompleted;
+@dynamic pendingStatusIsSkipped;
+
 // Public properties
 
 @synthesize uuid = uuid;
+@synthesize snapshot = snapshot;
 @synthesize pipeline = pipeline;
 @synthesize priority = priority;
 @synthesize dependencies = dependencies;
@@ -105,8 +110,14 @@ NSString *const YDBCloudCoreOperationIsReadyToStartNotification = @"YDBCloudCore
 		[coder encodeInt:kYapDatabaseCloudCoreOperation_CurrentVersion forKey:k_version];
 	}
 	
+	// Notes about persistence:
+	//
 	// The pipeline property is NOT encoded.
-	// It's stored via the pipelineID column automatically,
+	// It's stored via the `pipelineID` column automatically,
+	// and is explicitly set when the operations are restored.
+	//
+	// The `snapshot` property is NOT encoded.
+	// It's stored via the `graphID` column automatically,
 	// and is explicitly set when the operations are restored.
 	
 	[coder encodeObject:uuid forKey:k_uuid];
@@ -125,6 +136,7 @@ NSString *const YDBCloudCoreOperationIsReadyToStartNotification = @"YDBCloudCore
 	YapDatabaseCloudCoreOperation *copy = [[[self class] alloc] init];
 	
 	copy->uuid = uuid;
+	copy->snapshot = snapshot;
 	copy->pipeline = pipeline;
 	copy->dependencies = dependencies;
 	copy->priority = priority;
@@ -142,14 +154,38 @@ NSString *const YDBCloudCoreOperationIsReadyToStartNotification = @"YDBCloudCore
 #pragma mark Public API
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- (void)setDependencies:(NSSet<NSUUID *> *)newDependencies
+- (void)setDependencies:(NSSet<NSUUID *> *)inDependencies
 {
-#if !defined(NS_BLOCK_ASSERTIONS)
-	for (id obj in newDependencies)
+	NSMutableSet<NSUUID *> *newDependencies = [NSMutableSet setWithCapacity:inDependencies.count];
+	for (id dependency in inDependencies)
 	{
-		NSAssert([obj isKindOfClass:[NSUUID class]], @"Bad dependecy object !");
+		NSUUID *dependencyUUID = nil;
+		
+		if ([dependency isKindOfClass:[NSUUID class]])
+		{
+			dependencyUUID = (NSUUID *)dependency;
+		}
+		else if ([dependency isKindOfClass:[YapDatabaseCloudCoreOperation class]])
+		{
+			dependencyUUID = [(YapDatabaseCloudCoreOperation *)dependency uuid];
+		}
+		
+		if ([dependencyUUID isEqual:uuid]) {
+			// Ignore - op cannot depend on itself
+			continue;
+		}
+		
+		if (dependencyUUID)
+		{
+			[newDependencies addObject:dependencyUUID];
+		}
+		else
+		{
+		#ifndef NS_BLOCK_ASSERTIONS
+			NSAssert(NO, @"Bad dependecy object !");
+		#endif
+		}
 	}
-#endif
 	
 	NSString *const propKey = NSStringFromSelector(@selector(dependencies));
 	
@@ -175,7 +211,19 @@ NSString *const YDBCloudCoreOperationIsReadyToStartNotification = @"YDBCloudCore
 		dependencyUUID = [(YapDatabaseCloudCoreOperation *)dependency uuid];
 	}
 	
+	if ([dependencyUUID isEqual:uuid]) {
+		// Ignore - op cannot depend on itself
+		return;
+	}
+	
+#ifndef NS_BLOCK_ASSERTIONS
 	NSAssert(dependencyUUID != nil, @"Bad dependecy object !");
+#else
+	if (dependencyUUID == nil) {
+		// Ignore - non-supported dependency type
+		return;
+	}
+#endif
 	
 	NSString *const propKey = NSStringFromSelector(@selector(dependencies));
 	
@@ -224,28 +272,13 @@ NSString *const YDBCloudCoreOperationIsReadyToStartNotification = @"YDBCloudCore
 #pragma mark Protected API
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/**
- * Subclasses may choose to calculate implicit dependencies.
- *
- * This method is designed to assist in such a process,
- * as it allows for easier separation between:
- * - explict dependencies (specified by the user)
- * - implicit dependencies (calculated by the subclass)
- *
- * The default implementation simply returns the `dependencies` property.
-**/
-- (NSSet<NSUUID *> *)dependencyUUIDs
+- (BOOL)pendingStatusIsCompletedOrSkipped
 {
-	return dependencies;
-}
-
-- (BOOL)pendingStatusIsSkippedOrCompleted
-{
-	if (pendingStatus)
+	if (pendingStatus != nil)
 	{
 		YDBCloudCoreOperationStatus status = (YDBCloudCoreOperationStatus)[pendingStatus integerValue];
 		
-		return (status == YDBCloudOperationStatus_Skipped || status == YDBCloudOperationStatus_Completed);
+		return (status == YDBCloudOperationStatus_Completed || status == YDBCloudOperationStatus_Skipped);
 	}
 	else
 	{
@@ -255,7 +288,7 @@ NSString *const YDBCloudCoreOperationIsReadyToStartNotification = @"YDBCloudCore
 
 - (BOOL)pendingStatusIsCompleted
 {
-	if (pendingStatus)
+	if (pendingStatus != nil)
 		return ([pendingStatus integerValue] == YDBCloudOperationStatus_Completed);
 	else
 		return NO;
@@ -263,7 +296,7 @@ NSString *const YDBCloudCoreOperationIsReadyToStartNotification = @"YDBCloudCore
 
 - (BOOL)pendingStatusIsSkipped
 {
-	if (pendingStatus)
+	if (pendingStatus != nil)
 		return ([pendingStatus integerValue] == YDBCloudOperationStatus_Skipped);
 	else
 		return NO;
@@ -304,6 +337,7 @@ NSString *const YDBCloudCoreOperationIsReadyToStartNotification = @"YDBCloudCore
 	if (!YDB_IsEqualOrBothNil(pendingStatus, op->pendingStatus)) return NO;
 	
 	if (!YDB_IsEqualOrBothNil(uuid, op->uuid)) return NO;
+	if (snapshot != op->snapshot) return NO;
 	if (!YDB_IsEqualOrBothNil(pipeline, op->pipeline)) return NO;
 	
 	if (priority != op->priority) return NO;
@@ -322,13 +356,15 @@ NSString *const YDBCloudCoreOperationIsReadyToStartNotification = @"YDBCloudCore
 {
 	if (!pipeline || [pipeline isEqualToString:YapDatabaseCloudCoreDefaultPipelineName])
 	{
-		return [NSString stringWithFormat:@"<YapDatabaseCloudCoreOperation[%p]: uuid=\"%@\", priority=%d>",
-		                                     self, uuid, priority];
+		return [NSString stringWithFormat:
+			@"<YapDatabaseCloudCoreOperation[%p]: uuid=\"%@\", priority=%d>",
+			self, uuid, priority];
 	}
 	else
 	{
-		return [NSString stringWithFormat:@"<YapDatabaseCloudCoreOperation[%p]: pipeline=\"%@\" uuid=\"%@\", priority=%d>",
-		                                     self, pipeline, uuid, priority];
+		return [NSString stringWithFormat:
+			@"<YapDatabaseCloudCoreOperation[%p]: pipeline=\"%@\" uuid=\"%@\", priority=%d>",
+			self, pipeline, uuid, priority];
 	}
 }
 

@@ -13,24 +13,25 @@
 #import "YapDatabaseCloudCoreConnection.h"
 #import "YapDatabaseCloudCoreTransaction.h"
 
-#import "YapDatabaseCloudCoreOperation.h"
 #import "YapDatabaseCloudCoreOperationPrivate.h"
-
-#import "YapDatabaseCloudCoreGraph.h"
-#import "YapDatabaseCloudCorePipeline.h"
 #import "YapDatabaseCloudCorePipelinePrivate.h"
+#import "YapDatabaseCloudCoreGraphPrivate.h"
 
 #import "YapCache.h"
 #import "YapManyToManyCache.h"
 
-#import "sqlite3.h"
+#ifdef SQLITE_HAS_CODEC
+  #import <SQLCipher/sqlite3.h>
+#else
+  #import "sqlite3.h"
+#endif
 
 /**
  * This version number is stored in the yap2 table.
  * If there is a major re-write to this class, then the version number will be incremented,
  * and the class can automatically rebuild the tables as needed.
 **/
-#define YAPDATABASE_CLOUDCORE_CLASS_VERSION 2
+#define YAPDATABASE_CLOUDCORE_CLASS_VERSION 3
 
 static NSString * const YDBCloudCore_DiryMappingMetadata_NeedsRemove = @"NeedsRemove";
 static NSString * const YDBCloudCore_DiryMappingMetadata_NeedsInsert = @"NeedsInsert";
@@ -53,16 +54,16 @@ static NSString *const changeset_key_reset            = @"reset";
 	YapDatabaseCloudCoreOptions *options;
 }
 
-- (NSString *)pipelineTableName;
-- (NSString *)queueV1TableName;
-- (NSString *)queueTableName;
+- (NSString *)pipelineV2TableName; // For migration from OLD verion of table
+- (NSString *)pipelineV3TableName; // Latest version of table
+
+- (NSString *)queueV1TableName;  // For migration from OLD verion of table
+- (NSString *)queueV2TableName;  // Latest version of table
+
+- (NSString *)pipelineTableName; // Always returns latest version
+- (NSString *)queueTableName;    // Always returns latest version
 - (NSString *)tagTableName;
 - (NSString *)mappingTableName;
-
-- (NSArray *)registeredPipelineNamesExcludingDefault;
-
-- (void)restorePipelineRowids:(NSDictionary *)rowidsToPipelineName;
-- (void)restorePipelineGraphs:(NSDictionary *)sortedGraphsPerPipeline;
 
 - (void)commitAddedGraphs:(NSDictionary<NSString *, YapDatabaseCloudCoreGraph *> *)addedGraphs
        insertedOperations:(NSDictionary<NSString *, NSDictionary *> *)insertedOperations
@@ -110,6 +111,7 @@ static NSString *const changeset_key_reset            = @"reset";
 - (void)prepareForReadWriteTransaction;
 
 - (sqlite3_stmt *)pipelineTable_insertStatement;
+- (sqlite3_stmt *)pipelineTable_updateStatement;
 - (sqlite3_stmt *)pipelineTable_removeStatement;
 - (sqlite3_stmt *)pipelineTable_removeAllStatement;
 
@@ -160,6 +162,25 @@ typedef NS_OPTIONS(uint8_t, YDBCloudCore_EnumOps) {
            databaseTransaction:(YapDatabaseReadTransaction *)databaseTransaction;
 
 /**
+ * Subclass hooks
+**/
+
+// Allows subclasses to perform post-processing on operations before they are written to disk.
+// Examples of tasks a subclass may want to perform:
+//
+// - sanitization of various property values
+// - automatically merging duplicate operations within same commit
+// - automatically adding dependencies for operations in earlier commits (if using FlatGraph optimization)
+//
+- (NSArray<YapDatabaseCloudCoreOperation *> *)processOperations:(NSArray<YapDatabaseCloudCoreOperation *> *)operations
+                                                     inPipeline:(YapDatabaseCloudCorePipeline *)pipeline
+                                                   withGraphIdx:(NSUInteger)operationsGraphIdx;
+
+// Subclasses may override these methods to perform custom tasks as needed.
+- (void)didCompleteOperation:(YapDatabaseCloudCoreOperation *)operation;
+- (void)didSkipOperation:(YapDatabaseCloudCoreOperation *)operation;
+
+/**
  * All of the public methods that return an operation (directly, or via enumeration block),
  * always return a copy of the internally held operation.
  * 
@@ -177,6 +198,16 @@ typedef NS_OPTIONS(uint8_t, YDBCloudCore_EnumOps) {
                             usingBlock:(void (^)(YapDatabaseCloudCoreOperation *operation,
                                                  NSUInteger graphIdx, BOOL *stop))enumBlock;
 
+- (void)_enumerateOperations:(YDBCloudCore_EnumOps)flags
+                  usingBlock:(void (^)(YapDatabaseCloudCorePipeline *pipeline,
+                                       YapDatabaseCloudCoreOperation *operation,
+                                       NSUInteger graphIdx, BOOL *stop))enumBlock;
+
+- (void)_enumerateOperations:(YDBCloudCore_EnumOps)flags
+                  inPipeline:(YapDatabaseCloudCorePipeline *)pipeline
+                  usingBlock:(void (^)(YapDatabaseCloudCoreOperation *operation,
+                                       NSUInteger graphIdx, BOOL *stop))enumBlock;
+
 - (void)_enumerateAndModifyOperations:(YDBCloudCore_EnumOps)flags
                            usingBlock:(YapDatabaseCloudCoreOperation *
                                       (^)(YapDatabaseCloudCorePipeline *pipeline,
@@ -189,6 +220,9 @@ typedef NS_OPTIONS(uint8_t, YDBCloudCore_EnumOps) {
                                       (^)(YapDatabaseCloudCoreOperation *operation,
                                           NSUInteger graphIdx, BOOL *stop))enumBlock;
 
+/**
+ * Throw this if an attempt is made to invoke a read-write action within a read-only transaction.
+**/
 - (NSException *)requiresReadWriteTransactionException:(NSString *)methodName;
 
 @end

@@ -68,6 +68,11 @@
 {
 	if ((self = [super init]))
 	{
+#ifdef DEBUG
+        NSUInteger inGroupsNoDuplicatesCount = [[[NSSet alloc] initWithArray: inGroups] count];
+        NSUInteger inGroupsCount = [inGroups count];
+        NSAssert(inGroupsCount == inGroupsNoDuplicatesCount, @"YapDatabaseViewMappings should be initialized without duplicated groups. Otherwise the app might crash during animated updates");
+#endif
         allGroups = [[NSArray alloc] initWithArray:inGroups copyItems:YES];
 		NSUInteger allGroupsCount = [allGroups count];
         viewGroupsAreDynamic = NO;
@@ -445,7 +450,7 @@
 	
 	[newAllGroups sortUsingComparator:^NSComparisonResult(NSString *group1, NSString *group2) {
 		
-		return groupSortBlock(group1, group2, transaction);
+		return self->groupSortBlock(group1, group2, transaction);
 	}];
     
     return [newAllGroups copy];
@@ -1698,7 +1703,7 @@
 	
 	for (NSString *group in allGroups)
 	{
-		BOOL isVisible = [group isEqualToString:visibleGroup];
+		BOOL isVisible = visibleGroup && [group isEqualToString:visibleGroup];
 		
 		NSUInteger visibleCount = [self visibleCountForGroup:group];
 		BOOL hasRangeOptions = ([rangeOptions objectForKey:group] != nil);

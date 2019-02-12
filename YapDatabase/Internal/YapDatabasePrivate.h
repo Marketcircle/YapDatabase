@@ -12,7 +12,11 @@
 #import "YapMemoryTable.h"
 #import "YapMutationStack.h"
 
-#import "sqlite3.h"
+#ifdef SQLITE_HAS_CODEC
+  #import <SQLCipher/sqlite3.h>
+#else
+  #import "sqlite3.h"
+#endif
 #import "yap_vfs_shim.h"
 
 /**
@@ -110,11 +114,6 @@ static NSString *const ext_key_class = @"class";
 + (NSArray *)tableNamesUsing:(sqlite3 *)aDb;
 + (NSArray *)columnNamesForTable:(NSString *)tableName using:(sqlite3 *)aDb;
 + (NSDictionary *)columnNamesAndAffinityForTable:(NSString *)tableName using:(sqlite3 *)aDb;
-
-/**
- * New connections inherit their default values from this structure.
-**/
-- (YapDatabaseConnectionConfig *)connectionDefaults;
 
 /**
  * Called from YapDatabaseConnection's dealloc method to remove connection's state from connectionStates array.
@@ -232,6 +231,7 @@ static NSString *const ext_key_class = @"class";
 	
 	NSMutableDictionary *objectChanges;
 	NSMutableDictionary *metadataChanges;
+	NSMutableSet *insertedKeys;
 	NSMutableSet *removedKeys;
 	NSMutableSet *removedCollections;
 	NSMutableSet *removedRowids;
@@ -241,7 +241,8 @@ static NSString *const ext_key_class = @"class";
 	YapMutationStack_Bool *mutationStack;
 }
 
-- (id)initWithDatabase:(YapDatabase *)database;
+- (instancetype)initWithDatabase:(YapDatabase *)database;
+- (instancetype)initWithDatabase:(YapDatabase *)database config:(YapDatabaseConnectionConfig *)config;
 
 - (sqlite3_stmt *)beginTransactionStatement;
 - (sqlite3_stmt *)beginImmediateTransactionStatement;

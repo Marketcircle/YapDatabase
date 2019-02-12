@@ -33,6 +33,9 @@
 
 - (BOOL)populateView
 {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wimplicit-retain-self"
+	
 	YDBLogAutoTrace();
 	
 	// Remove everything from the database
@@ -389,6 +392,8 @@
 	}
 	
 	return YES;
+	
+#pragma clang diagnostic pop
 }
 
 - (void)repopulateView
@@ -417,6 +422,8 @@
 	// The changeset mechanism will automatically consolidate all changes to the minimum.
 	
 	[self enumerateGroupsUsingBlock:^(NSString *group, BOOL __unused *outerStop) {
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		// We must add the changes in reverse order.
 		// Either that, or the change index of each item would have to be zero,
@@ -433,6 +440,8 @@
 		}];
 		
 		[parentConnection->changes addObject:[YapDatabaseViewSectionChange deleteGroup:group]];
+		
+	#pragma clang diagnostic pop
 	}];
 	
 	isRepopulate = YES;
@@ -440,6 +449,58 @@
 		[self populateView];
 	}
 	isRepopulate = NO;
+}
+
+- (void)resortView {
+	YDBLogAutoTrace();
+
+	// TODO: Refactor
+	// This is written this way to avoid mutating the view while enumerating it.
+	// I didn't see another way of doing this that didn't end up invoking the grouping
+	// block, which is what we're trying to avoid here.
+	//
+	// Refactor in at least one of two ways:
+	// 1. Stop using NSNumber. int64_t is 8 bytes, but an NSNumber boxing an int64_t is...probably a lot more.
+	// 2. Stop storing all row ids in memory. If that's possible, #1 doesn't matter so much.
+	NSMutableDictionary *groups = NSMutableDictionary.new;
+
+	[self enumerateGroupsUsingBlock:^(NSString * _Nonnull group, BOOL * _Nonnull stop) {
+		NSMutableArray *rows = NSMutableArray.new;
+		[self enumerateRowidsInGroup:group usingBlock:^(int64_t rowid, NSUInteger index, BOOL *stop) {
+			[rows addObject:@(rowid)];
+		}];
+		groups[group] = rows;
+	}];
+
+	__unsafe_unretained YapDatabaseAutoViewConnection *viewConnection = (YapDatabaseAutoViewConnection *)parentConnection;
+	YapDatabaseBlockInvoke blockInvokeBitMask = YapDatabaseBlockInvokeIfObjectModified | YapDatabaseBlockInvokeIfMetadataModified;
+	YapDatabaseViewChangesBitMask changesBitMask = YapDatabaseViewChangedObject | YapDatabaseViewChangedMetadata;
+
+	[groups enumerateKeysAndObjectsUsingBlock:^(NSString *group, NSArray<NSNumber *> *rowIds, BOOL *stop) {
+		[rowIds enumerateObjectsUsingBlock:^(NSNumber *obj, NSUInteger idx, BOOL *stop) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wimplicit-retain-self"
+			int64_t rowid = obj.integerValue;
+
+			YapDatabaseViewSorting *sorting = nil;
+
+			YapCollectionKey *collectionKey = [databaseTransaction collectionKeyForRowid:rowid];
+			id object = [databaseTransaction objectForCollectionKey:collectionKey withRowid:rowid];
+			id metadata = [databaseTransaction metadataForCollectionKey:collectionKey withRowid:rowid];
+
+			[viewConnection getGrouping:NULL sorting:&sorting];
+
+			[self _handleChangeWithRowid:rowid
+			               collectionKey:collectionKey
+			                      object:object
+			                    metadata:metadata
+			                     sorting:sorting
+			          blockInvokeBitMask:blockInvokeBitMask
+			              changesBitMask:changesBitMask
+			                    isInsert:NO];
+#pragma clang diagnostic pop
+		}];
+	}];
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -519,6 +580,8 @@
 	// This block will be invoked repeatedly as we calculate the insertion index.
 	
 	NSComparisonResult (^compare)(NSUInteger) = ^NSComparisonResult (NSUInteger index){
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		int64_t anotherRowid = 0;
 		[self getRowid:&anotherRowid atIndex:index inGroup:group];
@@ -581,6 +644,8 @@
 			                      collectionKey.collection, collectionKey.key,        object,        metadata,
 			                            another.collection,       another.key, anotherObject, anotherMetadata);
 		}
+		
+	#pragma clang diagnostic pop
 	};
 	
 	NSComparisonResult cmp;
@@ -862,6 +927,75 @@
 	
 	// Add row to the view or update its position.
 	
+	[self insertRowid:rowid
+	    collectionKey:collectionKey
+	           object:object
+	         metadata:metadata
+	          inGroup:group
+	      withChanges:changesBitMask
+	            isNew:isInsert];
+}
+
+- (void)_handleChangeWithRowid:(int64_t)rowid
+                 collectionKey:(YapCollectionKey *)collectionKey
+                        object:(id)object
+                      metadata:(id)metadata
+                       sorting:(YapDatabaseViewSorting *)sorting
+            blockInvokeBitMask:(YapDatabaseBlockInvoke)blockInvokeBitMask
+                changesBitMask:(YapDatabaseViewChangesBitMask)changesBitMask
+                      isInsert:(BOOL)isInsert
+{
+	YDBLogAutoTrace();
+
+	__unsafe_unretained YapDatabaseView *view = (YapDatabaseView *)parentConnection->parent;
+
+	__unsafe_unretained NSString *collection = collectionKey.collection;
+
+	// Should we ignore the row based on the allowedCollections ?
+
+	YapWhitelistBlacklist *allowedCollections = view->options.allowedCollections;
+
+	if (allowedCollections && ![allowedCollections isAllowed:collection])
+	{
+		return;
+	}
+
+	// Determine if the grouping or sorting may have changed
+	BOOL sortingMayHaveChanged = (sorting->blockInvokeOptions & blockInvokeBitMask);
+	if (!sortingMayHaveChanged)
+	{
+		// Nothing left to do.
+		// The sortingBlock does not need to run
+
+		YapDatabaseViewLocator *locator = [self locatorForRowid:rowid];
+
+		if (locator.group)
+		{
+			[parentConnection->changes addObject:
+			 [YapDatabaseViewRowChange updateCollectionKey:collectionKey
+			                                       inGroup:locator.group
+			                                       atIndex:locator.index
+			                                   withChanges:changesBitMask]];
+		}
+
+		return;
+	}
+
+	// Grouping hasn't changed.
+	// Fetch the current group.
+	YapDatabaseViewLocator *locator = [self locatorForRowid:rowid];
+	NSString *group = locator.group;
+
+	if (group == nil)
+	{
+		// Nothing to do.
+		// The row wasn't previously in the view, and still isn't in the view.
+
+		return;
+	}
+
+	// Add row to the view or update its position.
+
 	[self insertRowid:rowid
 	    collectionKey:collectionKey
 	           object:object
@@ -1320,6 +1454,8 @@
 			  (YapDatabaseViewFindWithKeyBlock)find.findBlock;
 			
 			compare = ^NSComparisonResult (NSUInteger index){
+			#pragma clang diagnostic push
+			#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 				
 				int64_t rowid = 0;
 				[self getRowid:&rowid atIndex:index inGroup:group];
@@ -1327,6 +1463,8 @@
 				YapCollectionKey *ck = [databaseTransaction collectionKeyForRowid:rowid];
 				
 				return findBlock(ck.collection, ck.key);
+				
+			#pragma clang diagnostic pop
 			};
 			
 			break;
@@ -1337,6 +1475,8 @@
 			    (YapDatabaseViewFindWithObjectBlock)find.findBlock;
 			
 			compare = ^NSComparisonResult (NSUInteger index){
+			#pragma clang diagnostic push
+			#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 				
 				int64_t rowid = 0;
 				[self getRowid:&rowid atIndex:index inGroup:group];
@@ -1346,6 +1486,8 @@
 				[databaseTransaction getCollectionKey:&ck object:&object forRowid:rowid];
 				
 				return findBlock(ck.collection, ck.key, object);
+				
+			#pragma clang diagnostic pop
 			};
 			
 			break;
@@ -1356,6 +1498,8 @@
 			    (YapDatabaseViewFindWithMetadataBlock)find.findBlock;
 			
 			compare = ^NSComparisonResult (NSUInteger index){
+			#pragma clang diagnostic push
+			#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 				
 				int64_t rowid = 0;
 				[self getRowid:&rowid atIndex:index inGroup:group];
@@ -1365,6 +1509,8 @@
 				[databaseTransaction getCollectionKey:&ck metadata:&metadata forRowid:rowid];
 				
 				return findBlock(ck.collection, ck.key, metadata);
+				
+			#pragma clang diagnostic pop
 			};
 			
 			break;
@@ -1375,6 +1521,8 @@
 			    (YapDatabaseViewFindWithRowBlock)find.findBlock;
 			
 			compare = ^NSComparisonResult (NSUInteger index){
+			#pragma clang diagnostic push
+			#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 				
 				int64_t rowid = 0;
 				[self getRowid:&rowid atIndex:index inGroup:group];
@@ -1385,6 +1533,8 @@
 				[databaseTransaction getCollectionKey:&ck object:&object metadata:&metadata forRowid:rowid];
 				
 				return findBlock(ck.collection, ck.key, object, metadata);
+				
+			#pragma clang diagnostic pop
 			};
 		}
 		
@@ -1493,54 +1643,86 @@
 	
 	NSAssert(grouping != nil, @"Invalid parameter: grouping == nil");
 	NSAssert(sorting != nil, @"Invalid parameter: sorting == nil");
-	
+
+	[self _setGrouping:grouping
+	           sorting:sorting
+	        versionTag:inVersionTag];
+}
+
+- (void)setSorting:(YapDatabaseViewSorting *)sorting
+        versionTag:(NSString *)versionTag {
+	YDBLogAutoTrace();
+
+	NSAssert(sorting != nil, @"Invalid parameter: sorting == nil");
+
+	[self _setGrouping:nil
+	           sorting:sorting
+	        versionTag:versionTag];
+}
+
+- (void)_setGrouping:(nullable YapDatabaseViewGrouping *)grouping
+             sorting:(YapDatabaseViewSorting *)sorting
+          versionTag:(NSString *)inVersionTag
+{
+	YDBLogAutoTrace();
+
 	if (!databaseTransaction->isReadWriteTransaction)
 	{
 		YDBLogWarn(@"%@ - Method only allowed in readWrite transaction", THIS_METHOD);
 		return;
 	}
-	
+
 	NSString *newVersionTag = inVersionTag ? [inVersionTag copy] : @"";
-	
+
 	if ([[self versionTag] isEqualToString:newVersionTag])
 	{
 		YDBLogWarn(@"%@ - versionTag didn't change, so not updating view", THIS_METHOD);
 		return;
 	}
-	
+
 	__unsafe_unretained YapDatabaseAutoViewConnection *viewConnection =
-	  (YapDatabaseAutoViewConnection *)parentConnection;
-	
-	[viewConnection setGrouping:grouping
-	                    sorting:sorting
-	                 versionTag:newVersionTag];
-	
-	[self repopulateView];
-	
+	(YapDatabaseAutoViewConnection *)parentConnection;
+
+	if (grouping) {
+		[viewConnection setGrouping:grouping
+		                    sorting:sorting
+		                 versionTag:newVersionTag];
+		[self repopulateView];
+	} else {
+		[viewConnection setSorting:sorting
+		                versionTag:newVersionTag];
+		[self resortView];
+	}
+
 	[self setStringValue:newVersionTag
 	     forExtensionKey:ext_key_versionTag
 	          persistent:[self isPersistentView]];
-	
+
 	// Notify any extensions dependent upon this one that we repopulated.
-	
+
 	NSString *registeredName = [self registeredName];
 	NSDictionary *extensionDependencies = databaseTransaction->connection->extensionDependencies;
-	
+
 	[extensionDependencies enumerateKeysAndObjectsUsingBlock:^(id key, id obj, BOOL __unused *stop){
-		
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
+
 		__unsafe_unretained NSString *extName = (NSString *)key;
 		__unsafe_unretained NSSet *extDependencies = (NSSet *)obj;
-		
+
 		if ([extDependencies containsObject:registeredName])
 		{
 			YapDatabaseExtensionTransaction *extTransaction = [databaseTransaction ext:extName];
-			
+
 			if ([extTransaction respondsToSelector:@selector(view:didRepopulateWithFlags:)])
 			{
+				// TODO: If grouping == nil, should we be including the YDB_GroupingMayHaveChanged flag?
 				int flags = YDB_GroupingMayHaveChanged | YDB_SortingMayHaveChanged;
 				[(id <YapDatabaseViewDependency>)extTransaction view:registeredName didRepopulateWithFlags:flags];
 			}
 		}
+
+#pragma clang diagnostic pop
 	}];
 }
 

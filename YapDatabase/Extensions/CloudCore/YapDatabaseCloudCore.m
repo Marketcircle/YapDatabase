@@ -61,9 +61,10 @@ NSString *const YapDatabaseCloudCoreDefaultPipelineName = @"default";
 	sqlite3 *db = transaction->connection->db;
 	
 	NSArray *tableNames = @[
-	  [self pipelineTableNameForRegisteredName:registeredName],
+	  [self pipelineV2TableNameForRegisteredName:registeredName],
+	  [self pipelineV3TableNameForRegisteredName:registeredName],
 	  [self queueV1TableNameForRegisteredName:registeredName],
-	  [self queueTableNameForRegisteredName:registeredName],
+	  [self queueV2TableNameForRegisteredName:registeredName],
 	  [self mappingTableNameForRegisteredName:registeredName],
 	  [self tagTableNameForRegisteredName:registeredName]
 	];
@@ -81,17 +82,22 @@ NSString *const YapDatabaseCloudCoreDefaultPipelineName = @"default";
 	}
 }
 
-+ (NSString *)pipelineTableNameForRegisteredName:(NSString *)registeredName
++ (NSString *)pipelineV2TableNameForRegisteredName:(NSString *)registeredName
 {
-	return [NSString stringWithFormat:@"cloudcore_pipeline_%@", registeredName];
+	return [NSString stringWithFormat:@"cloudcore_pipeline_%@", registeredName]; // OLD version
+}
+
++ (NSString *)pipelineV3TableNameForRegisteredName:(NSString *)registeredName
+{
+	return [NSString stringWithFormat:@"cloudcore_pipeline3_%@", registeredName];
 }
 
 + (NSString *)queueV1TableNameForRegisteredName:(NSString *)registeredName
 {
-	return [NSString stringWithFormat:@"cloudcore_queue_%@", registeredName];
+	return [NSString stringWithFormat:@"cloudcore_queue_%@", registeredName]; // OLD version
 }
 
-+ (NSString *)queueTableNameForRegisteredName:(NSString *)registeredName
++ (NSString *)queueV2TableNameForRegisteredName:(NSString *)registeredName
 {
 	return [NSString stringWithFormat:@"cloudcore_queue2_%@", registeredName];
 }
@@ -190,28 +196,44 @@ withRegisteredExtensions:(NSDictionary __unused *)registeredExtensions
 **/
 - (YapDatabaseExtensionConnection *)newConnection:(YapDatabaseConnection *)databaseConnection
 {
-	NSAssert(NO, @"Missing required method(%@) in subclass(%@)", NSStringFromSelector(_cmd), [self class]);
+	// Subclasses should override this method,
+	// and return an instance of their own subclass.
 	
-	return nil;
+	return [[YapDatabaseCloudCoreConnection alloc] initWithParent:self databaseConnection:databaseConnection];
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #pragma mark Table Names
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- (NSString *)pipelineTableName
+- (NSString *)pipelineV2TableName // For migration from OLD verion of table
 {
-	return [[self class] pipelineTableNameForRegisteredName:self.registeredName];
+	return [[self class] pipelineV2TableNameForRegisteredName:self.registeredName];
 }
 
-- (NSString *)queueV1TableName
+- (NSString *)pipelineV3TableName
+{
+	return [[self class] pipelineV3TableNameForRegisteredName:self.registeredName];
+}
+
+- (NSString *)pipelineTableName // Always returns latest version
+{
+	return [self pipelineV3TableName];
+}
+
+- (NSString *)queueV1TableName // For migration from OLD verion of table
 {
 	return [[self class] queueV1TableNameForRegisteredName:self.registeredName];
 }
 
-- (NSString *)queueTableName
+- (NSString *)queueV2TableName
 {
-	return [[self class] queueTableNameForRegisteredName:self.registeredName];
+	return [[self class] queueV2TableNameForRegisteredName:self.registeredName];
+}
+
+- (NSString *)queueTableName // Always returns latest version
+{
+	return [self queueV2TableName];
 }
 
 - (NSString *)tagTableName
@@ -275,6 +297,8 @@ withRegisteredExtensions:(NSDictionary __unused *)registeredExtensions
 	__block YapDatabaseCloudCorePipeline *pipeline = nil;
 	
 	dispatch_block_t block = ^{
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		pipeline = pipelines[name];
 		
@@ -286,6 +310,8 @@ withRegisteredExtensions:(NSDictionary __unused *)registeredExtensions
 				pipeline = pipelines[alias];
 			}
 		}
+		
+	#pragma clang diagnostic pop
 	};
 	
 	if (dispatch_get_specific(IsOnQueueKey))
@@ -315,6 +341,8 @@ withRegisteredExtensions:(NSDictionary __unused *)registeredExtensions
 	__block BOOL result = YES;
 	
 	dispatch_block_t block = ^{ @autoreleasepool {
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		if (pipelines[pipeline.name] != nil)
 		{
@@ -341,6 +369,8 @@ withRegisteredExtensions:(NSDictionary __unused *)registeredExtensions
 		if (suspendCount > 0) {
 			[pipeline suspendWithCount:suspendCount];
 		}
+		
+	#pragma clang diagnostic pop
 	}};
 	
 	if (dispatch_get_specific(IsOnQueueKey))
@@ -359,8 +389,12 @@ withRegisteredExtensions:(NSDictionary __unused *)registeredExtensions
 	__block NSArray *allPipelines = nil;
 	
 	dispatch_block_t block = ^{ @autoreleasepool {
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		allPipelines = [pipelines allValues];
+		
+	#pragma clang diagnostic pop
 	}};
 	
 	if (dispatch_get_specific(IsOnQueueKey))
@@ -379,8 +413,12 @@ withRegisteredExtensions:(NSDictionary __unused *)registeredExtensions
 	__block NSArray *allPipelineNames = nil;
 	
 	dispatch_block_t block = ^{ @autoreleasepool {
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		allPipelineNames = [pipelines allKeys];
+		
+	#pragma clang diagnostic pop
 	}};
 	
 	if (dispatch_get_specific(IsOnQueueKey))
@@ -389,30 +427,6 @@ withRegisteredExtensions:(NSDictionary __unused *)registeredExtensions
 		dispatch_sync(queue, block);
 	
 	return allPipelineNames;
-}
-
-/**
- * This method is called to extract the pipeline names we need to write to the pipeline table.
- * This includes every registered pipeline, except the default pipeline (which doesn't need to be written).
-**/
-- (NSArray *)registeredPipelineNamesExcludingDefault
-{
-	__block NSArray *allNames = nil;
-	
-	dispatch_block_t block = ^{ @autoreleasepool {
-		
-		allNames = [pipelines allKeys];
-	}};
-	
-	if (dispatch_get_specific(IsOnQueueKey))
-		block();
-	else
-		dispatch_sync(queue, block);
-	
-	NSMutableArray *result = [allNames mutableCopy];
-	[result removeObject:YapDatabaseCloudCoreDefaultPipelineName];
-	
-	return [result copy];
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -429,7 +443,12 @@ withRegisteredExtensions:(NSDictionary __unused *)registeredExtensions
 	__block NSUInteger result = 0;
 	
 	dispatch_block_t block = ^{
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
+		
 		result = suspendCount;
+		
+	#pragma clang diagnostic pop
 	};
 	
 	if (dispatch_get_specific(IsOnQueueKey))
@@ -450,6 +469,8 @@ withRegisteredExtensions:(NSDictionary __unused *)registeredExtensions
 	__block NSUInteger newSuspendCount = 0;
 	
 	dispatch_block_t block = ^{ @autoreleasepool {
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		if (suspendCount <= (NSUIntegerMax - suspendCountIncrement))
 			suspendCount += suspendCountIncrement;
@@ -463,6 +484,8 @@ withRegisteredExtensions:(NSDictionary __unused *)registeredExtensions
 		{
 			[pipeline suspendWithCount:suspendCountIncrement];
 		}
+		
+	#pragma clang diagnostic pop
 	}};
 	
 	if (dispatch_get_specific(IsOnQueueKey))
@@ -478,7 +501,9 @@ withRegisteredExtensions:(NSDictionary __unused *)registeredExtensions
 	__block NSUInteger newSuspendCount = 0;
 	
 	dispatch_block_t block = ^{ @autoreleasepool {
-	
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
+		
 		if (suspendCount > 0) {
 			suspendCount--;
 		}
@@ -489,6 +514,8 @@ withRegisteredExtensions:(NSDictionary __unused *)registeredExtensions
 		{
 			[pipeline resume];
 		}
+		
+	#pragma clang diagnostic pop
 	}};
 	
 	if (dispatch_get_specific(IsOnQueueKey))
@@ -502,58 +529,6 @@ withRegisteredExtensions:(NSDictionary __unused *)registeredExtensions
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #pragma mark Restore & Commit
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-/**
- * This method is called in order to set all the pipeline.rowid properties.
- * The given mappings should contain the rowid for every registered pipeline.
-**/
-- (void)restorePipelineRowids:(NSDictionary *)rowidsToPipelineName
-{
-	YDBLogAutoTrace();
-	
-	dispatch_block_t block = ^{ @autoreleasepool {
-		
-		[rowidsToPipelineName enumerateKeysAndObjectsUsingBlock:^(NSNumber *rowid, NSString *pipelineName, BOOL *stop){
-			
-			YapDatabaseCloudCorePipeline *pipeline = pipelines[pipelineName];
-			if (pipeline)
-			{
-				pipeline.rowid = [rowid longLongValue];
-			}
-		}];
-	}};
-	
-	if (dispatch_get_specific(IsOnQueueKey))
-		block();
-	else
-		dispatch_sync(queue, block);
-}
-
-/**
- * This method is called in order to restore the pending graphs for each pipeline.
-**/
-- (void)restorePipelineGraphs:(NSDictionary *)sortedGraphsPerPipeline
-{
-	YDBLogAutoTrace();
-	
-	dispatch_block_t block = ^{ @autoreleasepool {
-		
-		[sortedGraphsPerPipeline enumerateKeysAndObjectsUsingBlock:
-		    ^(NSString *pipelineName, NSArray *sortedGraphs, BOOL *stop)
-		{
-			YapDatabaseCloudCorePipeline *pipeline = pipelines[pipelineName];
-			if (pipeline)
-			{
-				[pipeline restoreGraphs:sortedGraphs];
-			}
-		}];
-	}};
-	
-	if (dispatch_get_specific(IsOnQueueKey))
-		block();
-	else
-		dispatch_sync(queue, block);
-}
 
 /**
  * Called after the operations have been committed to disk.
@@ -572,6 +547,8 @@ withRegisteredExtensions:(NSDictionary __unused *)registeredExtensions
 	}
 	
 	dispatch_block_t block = ^{ @autoreleasepool {
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		for (YapDatabaseCloudCorePipeline *pipeline in [pipelines objectEnumerator])
 		{
@@ -582,6 +559,8 @@ withRegisteredExtensions:(NSDictionary __unused *)registeredExtensions
 			         insertedOperations:insertedForPipeline
 			         modifiedOperations:modifiedOperations];
 		}
+		
+	#pragma clang diagnostic pop
 	}};
 	
 	if (dispatch_get_specific(IsOnQueueKey))
