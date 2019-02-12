@@ -1,6 +1,6 @@
 {
   "name": "YapDatabase",
-  "version": "2.9.2",
+  "version": "3.0.1",
   "summary": "A key/value store built atop sqlite for iOS & Mac.",
   "homepage": "https://github.com/yapstudios/YapDatabase",
   "license": "MIT",
@@ -9,11 +9,11 @@
   },
   "source": {
     "git": "https://github.com/yapstudios/YapDatabase.git",
-    "tag": "2.9.2"
+    "tag": "3.0.1"
   },
   "platforms": {
-    "osx": "10.8",
-    "ios": "6.0",
+    "osx": "10.9",
+    "ios": "8.0",
     "tvos": "9.0",
     "watchos": "2.0"
   },
@@ -25,13 +25,13 @@
       "subspecs": [
         {
           "name": "Core",
-          "libraries": "sqlite3",
           "xcconfig": {
             "OTHER_CFLAGS": "$(inherited) -DYAP_STANDARD_SQLITE"
           },
+          "libraries": "sqlite3",
           "dependencies": {
             "CocoaLumberjack": [
-              "~> 2"
+
             ]
           },
           "source_files": [
@@ -53,9 +53,29 @@
           },
           "subspecs": [
             {
-              "name": "Views",
-              "source_files": "YapDatabase/Extensions/Views/**/*.{h,m,mm,c}",
-              "private_header_files": "YapDatabase/Extensions/Views/Internal/*.h"
+              "name": "View",
+              "source_files": "YapDatabase/Extensions/View/**/*.{h,m,mm,c}",
+              "private_header_files": "YapDatabase/Extensions/View/Internal/*.h"
+            },
+            {
+              "name": "AutoView",
+              "dependencies": {
+                "YapDatabase/Standard/Extensions/View": [
+
+                ]
+              },
+              "source_files": "YapDatabase/Extensions/AutoView/**/*.{h,m,mm,c}",
+              "private_header_files": "YapDatabase/Extensions/AutoView/Internal/*.h"
+            },
+            {
+              "name": "ManualView",
+              "dependencies": {
+                "YapDatabase/Standard/Extensions/View": [
+
+                ]
+              },
+              "source_files": "YapDatabase/Extensions/ManualView/**/*.{h,m,mm,c}",
+              "private_header_files": "YapDatabase/Extensions/ManualView/Internal/*.h"
             },
             {
               "name": "SecondaryIndex",
@@ -83,35 +103,30 @@
               "private_header_files": "YapDatabase/Extensions/Hooks/Internal/*.h"
             },
             {
-              "name": "FilteredViews",
+              "name": "FilteredView",
               "dependencies": {
-                "YapDatabase/Standard/Extensions/Views": [
+                "YapDatabase/Standard/Extensions/View": [
 
                 ]
               },
-              "source_files": "YapDatabase/Extensions/FilteredViews/**/*.{h,m,mm,c}",
-              "private_header_files": "YapDatabase/Extensions/FilteredViews/Internal/*.h"
+              "source_files": "YapDatabase/Extensions/FilteredView/**/*.{h,m,mm,c}",
+              "private_header_files": "YapDatabase/Extensions/FilteredView/Internal/*.h"
             },
             {
-              "name": "SearchResults",
+              "name": "SearchResultsView",
               "dependencies": {
-                "YapDatabase/Standard/Extensions/Views": [
+                "YapDatabase/Standard/Extensions/AutoView": [
 
                 ],
                 "YapDatabase/Standard/Extensions/FullTextSearch": [
 
                 ]
               },
-              "source_files": "YapDatabase/Extensions/SearchResults/**/*.{h,m,mm,c}",
-              "private_header_files": "YapDatabase/Extensions/SearchResults/Internal/*.h"
+              "source_files": "YapDatabase/Extensions/SearchResultsView/**/*.{h,m,mm,c}",
+              "private_header_files": "YapDatabase/Extensions/SearchResultsView/Internal/*.h"
             },
             {
               "name": "CloudKit",
-              "platforms": {
-                "osx": "10.8",
-                "ios": "6.0",
-                "tvos": "9.0"
-              },
               "source_files": "YapDatabase/Extensions/CloudKit/**/*.{h,m,mm,c}",
               "private_header_files": "YapDatabase/Extensions/CloudKit/Internal/*.h"
             },
@@ -122,25 +137,31 @@
             },
             {
               "name": "ConnectionProxy",
-              "source_files": "YapDatabase/Extensions/ConnectionProxy/**/*.{h,m,mm,c}",
-              "private_header_files": "YapDatabase/Extensions/ConnectionProxy/Internal/*.h"
+              "source_files": "YapDatabase/Extensions/ConnectionProxy/**/*.{h,m,mm,c}"
             },
             {
               "name": "ActionManager",
-              "platforms": {
-                "osx": "10.8",
-                "ios": "6.0"
+              "osx": {
+                "frameworks": "SystemConfiguration"
+              },
+              "ios": {
+                "frameworks": "SystemConfiguration"
+              },
+              "tvos": {
+                "frameworks": "SystemConfiguration"
               },
               "dependencies": {
-                "Reachability": [
-                  "~> 3"
-                ],
-                "YapDatabase/Standard/Extensions/Views": [
+                "YapDatabase/Standard/Extensions/AutoView": [
 
                 ]
               },
               "source_files": "YapDatabase/Extensions/ActionManager/**/*.{h,m,mm,c}",
               "private_header_files": "YapDatabase/Extensions/ActionManager/Internal/*.h"
+            },
+            {
+              "name": "CloudCore",
+              "source_files": "YapDatabase/Extensions/CloudCore/**/*.{h,m,mm,c}",
+              "private_header_files": "YapDatabase/Extensions/CloudCore/Internal/*.h"
             }
           ]
         }
@@ -151,16 +172,16 @@
       "subspecs": [
         {
           "name": "Core",
-          "dependencies": {
-            "SQLCipher/fts": [
-
-            ],
-            "CocoaLumberjack": [
-              "~> 2"
-            ]
-          },
           "xcconfig": {
             "OTHER_CFLAGS": "$(inherited) -DSQLITE_HAS_CODEC"
+          },
+          "dependencies": {
+            "SQLCipher": [
+              ">= 3.4.0"
+            ],
+            "CocoaLumberjack": [
+
+            ]
           },
           "source_files": [
             "YapDatabase/*.{h,m,mm,c}",
@@ -181,9 +202,29 @@
           },
           "subspecs": [
             {
-              "name": "Views",
-              "source_files": "YapDatabase/Extensions/Views/**/*.{h,m,mm,c}",
-              "private_header_files": "YapDatabase/Extensions/Views/Internal/*.h"
+              "name": "View",
+              "source_files": "YapDatabase/Extensions/View/**/*.{h,m,mm,c}",
+              "private_header_files": "YapDatabase/Extensions/View/Internal/*.h"
+            },
+            {
+              "name": "AutoView",
+              "dependencies": {
+                "YapDatabase/SQLCipher/Extensions/View": [
+
+                ]
+              },
+              "source_files": "YapDatabase/Extensions/AutoView/**/*.{h,m,mm,c}",
+              "private_header_files": "YapDatabase/Extensions/AutoView/Internal/*.h"
+            },
+            {
+              "name": "ManualView",
+              "dependencies": {
+                "YapDatabase/SQLCipher/Extensions/View": [
+
+                ]
+              },
+              "source_files": "YapDatabase/Extensions/ManualView/**/*.{h,m,mm,c}",
+              "private_header_files": "YapDatabase/Extensions/ManualView/Internal/*.h"
             },
             {
               "name": "SecondaryIndex",
@@ -211,35 +252,30 @@
               "private_header_files": "YapDatabase/Extensions/Hooks/Internal/*.h"
             },
             {
-              "name": "FilteredViews",
+              "name": "FilteredView",
               "dependencies": {
-                "YapDatabase/SQLCipher/Extensions/Views": [
+                "YapDatabase/SQLCipher/Extensions/View": [
 
                 ]
               },
-              "source_files": "YapDatabase/Extensions/FilteredViews/**/*.{h,m,mm,c}",
-              "private_header_files": "YapDatabase/Extensions/FilteredViews/Internal/*.h"
+              "source_files": "YapDatabase/Extensions/FilteredView/**/*.{h,m,mm,c}",
+              "private_header_files": "YapDatabase/Extensions/FilteredView/Internal/*.h"
             },
             {
-              "name": "SearchResults",
+              "name": "SearchResultsView",
               "dependencies": {
-                "YapDatabase/SQLCipher/Extensions/Views": [
+                "YapDatabase/SQLCipher/Extensions/AutoView": [
 
                 ],
                 "YapDatabase/SQLCipher/Extensions/FullTextSearch": [
 
                 ]
               },
-              "source_files": "YapDatabase/Extensions/SearchResults/**/*.{h,m,mm,c}",
-              "private_header_files": "YapDatabase/Extensions/SearchResults/Internal/*.h"
+              "source_files": "YapDatabase/Extensions/SearchResultsView/**/*.{h,m,mm,c}",
+              "private_header_files": "YapDatabase/Extensions/SearchResultsView/Internal/*.h"
             },
             {
               "name": "CloudKit",
-              "platforms": {
-                "osx": "10.8",
-                "ios": "6.0",
-                "tvos": "9.0"
-              },
               "source_files": "YapDatabase/Extensions/CloudKit/**/*.{h,m,mm,c}",
               "private_header_files": "YapDatabase/Extensions/CloudKit/Internal/*.h"
             },
@@ -250,25 +286,31 @@
             },
             {
               "name": "ConnectionProxy",
-              "source_files": "YapDatabase/Extensions/ConnectionProxy/**/*.{h,m,mm,c}",
-              "private_header_files": "YapDatabase/Extensions/ConnectionProxy/Internal/*.h"
+              "source_files": "YapDatabase/Extensions/ConnectionProxy/**/*.{h,m,mm,c}"
             },
             {
               "name": "ActionManager",
-              "platforms": {
-                "osx": "10.8",
-                "ios": "6.0"
+              "osx": {
+                "frameworks": "SystemConfiguration"
+              },
+              "ios": {
+                "frameworks": "SystemConfiguration"
+              },
+              "tvos": {
+                "frameworks": "SystemConfiguration"
               },
               "dependencies": {
-                "Reachability": [
-                  "~> 3"
-                ],
-                "YapDatabase/SQLCipher/Extensions/Views": [
+                "YapDatabase/SQLCipher/Extensions/AutoView": [
 
                 ]
               },
               "source_files": "YapDatabase/Extensions/ActionManager/**/*.{h,m,mm,c}",
               "private_header_files": "YapDatabase/Extensions/ActionManager/Internal/*.h"
+            },
+            {
+              "name": "CloudCore",
+              "source_files": "YapDatabase/Extensions/CloudCore/**/*.{h,m,mm,c}",
+              "private_header_files": "YapDatabase/Extensions/CloudCore/Internal/*.h"
             }
           ]
         }

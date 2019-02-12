@@ -4,12 +4,14 @@
 #import "YapActionItem.h"
 #import "YapDatabaseActionManagerConnection.h"
 #import "YapDatabaseActionManagerTransaction.h"
-#import "YapDatabaseView.h"
+#import "YapDatabaseAutoView.h"
 #import "YapReachability.h"
 
 @class YapDatabaseConnection;
 
 NS_ASSUME_NONNULL_BEGIN
+
+typedef NSArray<YapActionItem*> *_Nullable (^YapActionScheduler)(NSString *collection, NSString *key, id object);
 
 /**
  * This extension automatically monitors the database for objects that support the YapActionable protocol.
@@ -31,12 +33,18 @@ NS_ASSUME_NONNULL_BEGIN
  * - refreshing items when they've become "stale"
  *   e.g.: periodically updating user infromation from the server
 **/
-@interface YapDatabaseActionManager : YapDatabaseView
+@interface YapDatabaseActionManager : YapDatabaseAutoView
 
 - (instancetype)init;
+
 - (instancetype)initWithConnection:(nullable YapDatabaseConnection *)connection;
+
 - (instancetype)initWithConnection:(nullable YapDatabaseConnection *)connection
                            options:(nullable YapDatabaseViewOptions *)options;
+
+- (instancetype)initWithConnection:(nullable YapDatabaseConnection *)connection
+                           options:(nullable YapDatabaseViewOptions *)options
+                         scheduler:(nullable YapActionScheduler)scheduler;
 
 #if !TARGET_OS_WATCH
 /**

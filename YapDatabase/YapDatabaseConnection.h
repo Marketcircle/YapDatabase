@@ -279,9 +279,23 @@ typedef NS_OPTIONS(NSUInteger, YapDatabaseConnectionFlushMemoryFlags) {
  * However, once connection2 completes its transaction, it will automatically update itself to snapshot 2.
  *
  * In general, the snapshot is primarily for internal use.
- * However, it may come in handy for some tricky edge-case bugs (why doesn't my connection see that other commit?)
+ * However, it may come in handy for some tricky edge-case bugs
+ * (i.e. why doesn't my connection see that other commit ?)
 **/
 @property (atomic, assign, readonly) uint64_t snapshot;
+
+/**
+ * Returns the number of pending/active transactions for the connection.
+ * That is, the number of queued read-only & read-write transactions that are
+ * currently queued to be performed on this connection.
+ *
+ * Note that if a transaction is currently in progress (active),
+ * it's still considered "pending" since it hasn't completed yet.
+ *
+ * This is a generalized way to estimate the load on a connection,
+ * and can be used for load balancing, such as done by YapDatabaseConnectionPool.
+**/
+@property (atomic, assign, readonly) uint64_t pendingTransactionCount;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #pragma mark Transactions
@@ -780,7 +794,7 @@ typedef NS_OPTIONS(NSUInteger, YapDatabaseConnectionFlushMemoryFlags) {
  *   The progress in cancellable, meaning that invoking [progress cancel] will abort the backup operation.
 **/
 - (NSProgress *)asyncBackupToPath:(NSString *)backupDatabasePath
-                  completionBlock:(nullable void (^)(NSError *error))completionBlock;
+                  completionBlock:(nullable void (^)(NSError * _Nullable))completionBlock;
 
 /**
  * This method backs up the database by exporting all the tables to another sqlite database.
@@ -807,7 +821,7 @@ typedef NS_OPTIONS(NSUInteger, YapDatabaseConnectionFlushMemoryFlags) {
 **/
 - (NSProgress *)asyncBackupToPath:(NSString *)backupDatabasePath
                   completionQueue:(nullable dispatch_queue_t)completionQueue
-                  completionBlock:(nullable void (^)(NSError *))completionBlock;
+                  completionBlock:(nullable void (^)(NSError * _Nullable))completionBlock;
 
 @end
 

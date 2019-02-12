@@ -9,9 +9,12 @@
 #import "YapDatabaseTransaction.h"
 
 #import "YapCollectionKey.h"
-#import "YapMemoryTable.h"
 
-#import "sqlite3.h"
+#ifdef SQLITE_HAS_CODEC
+  #import <SQLCipher/sqlite3.h>
+#else
+  #import "sqlite3.h"
+#endif
 
 
 typedef NS_OPTIONS(NSUInteger, YapDatabaseConnectionFlushMemoryFlags_Extension) {
@@ -23,6 +26,16 @@ typedef NS_OPTIONS(NSUInteger, YapDatabaseConnectionFlushMemoryFlags_Extension) 
 //																		 YapDatabaseConnectionFlushMemoryFlags_Statements |
 //																		 YapDatabaseConnectionFlushMemoryFlags_Internal   ),
 	
+	/**
+	 * Some extensions may store certain "state" information that was read from the database
+	 * when the extension was being prepared for use. This state information is expected to be
+	 * in-sync with what's on disk.
+	 *
+	 * However, when multiple processes are writing to the database,
+	 * there may be scenarios where the changeset from process A doesn't get propogated to process B.
+	 * If this happens, the `_flushMemoryWithFlags` method is invoked,
+	 * and this flag is passed to warn the extension that it's cached state may be invalid.
+	**/
 	YapDatabaseConnectionFlushMemoryFlags_Extension_State = 1 << 3,
 };
 
@@ -110,58 +123,58 @@ typedef NS_OPTIONS(NSUInteger, YapDatabaseConnectionFlushMemoryFlags_Extension) 
  * See YapDatabaseExtensionTransaction.m for discussion of these methods
 **/
 
-- (void)handleInsertObject:(id)object
+- (void)didInsertObject:(id)object
+       forCollectionKey:(YapCollectionKey *)collectionKey
+           withMetadata:(id)metadata
+                  rowid:(int64_t)rowid;
+
+- (void)didUpdateObject:(id)object
+       forCollectionKey:(YapCollectionKey *)collectionKey
+           withMetadata:(id)metadata
+                  rowid:(int64_t)rowid;
+
+- (void)didReplaceObject:(id)object
+        forCollectionKey:(YapCollectionKey *)collectionKey
+               withRowid:(int64_t)rowid;
+
+- (void)didReplaceMetadata:(id)metadata
           forCollectionKey:(YapCollectionKey *)collectionKey
-              withMetadata:(id)metadata
-                     rowid:(int64_t)rowid;
+                 withRowid:(int64_t)rowid;
 
-- (void)handleUpdateObject:(id)object
-          forCollectionKey:(YapCollectionKey *)collectionKey
-              withMetadata:(id)metadata
-                     rowid:(int64_t)rowid;
+- (void)didTouchObjectForCollectionKey:(YapCollectionKey *)collectionKey withRowid:(int64_t)rowid;
+- (void)didTouchMetadataForCollectionKey:(YapCollectionKey *)collectionKey withRowid:(int64_t)rowid;
+- (void)didTouchRowForCollectionKey:(YapCollectionKey *)collectionKey withRowid:(int64_t)rowid;
 
-- (void)handleReplaceObject:(id)object
-           forCollectionKey:(YapCollectionKey *)collectionKey
-                  withRowid:(int64_t)rowid;
+- (void)didRemoveObjectForCollectionKey:(YapCollectionKey *)collectionKey withRowid:(int64_t)rowid;
 
-- (void)handleReplaceMetadata:(id)metadata
-             forCollectionKey:(YapCollectionKey *)collectionKey
-                    withRowid:(int64_t)rowid;
+- (void)didRemoveObjectsForKeys:(NSArray *)keys inCollection:(NSString *)collection withRowids:(NSArray *)rowids;
 
-- (void)handleTouchObjectForCollectionKey:(YapCollectionKey *)collectionKey withRowid:(int64_t)rowid;
-- (void)handleTouchMetadataForCollectionKey:(YapCollectionKey *)collectionKey withRowid:(int64_t)rowid;
-- (void)handleTouchRowForCollectionKey:(YapCollectionKey *)collectionKey withRowid:(int64_t)rowid;
-
-- (void)handleRemoveObjectForCollectionKey:(YapCollectionKey *)collectionKey withRowid:(int64_t)rowid;
-
-- (void)handleRemoveObjectsForKeys:(NSArray *)keys inCollection:(NSString *)collection withRowids:(NSArray *)rowids;
-
-- (void)handleRemoveAllObjectsInAllCollections;
+- (void)didRemoveAllObjectsInAllCollections;
 
 // Pre-op versions
 
-- (void)handleWillInsertObject:(id)object
-          forCollectionKey:(YapCollectionKey *)collectionKey
-              withMetadata:(id)metadata;
+- (void)willInsertObject:(id)object
+        forCollectionKey:(YapCollectionKey *)collectionKey
+            withMetadata:(id)metadata;
 
-- (void)handleWillUpdateObject:(id)object
-          forCollectionKey:(YapCollectionKey *)collectionKey
-              withMetadata:(id)metadata
-                     rowid:(int64_t)rowid;
+- (void)willUpdateObject:(id)object
+        forCollectionKey:(YapCollectionKey *)collectionKey
+            withMetadata:(id)metadata
+                   rowid:(int64_t)rowid;
 
-- (void)handleWillReplaceObject:(id)object
+- (void)willReplaceObject:(id)object
+         forCollectionKey:(YapCollectionKey *)collectionKey
+                withRowid:(int64_t)rowid;
+
+- (void)willReplaceMetadata:(id)metadata
            forCollectionKey:(YapCollectionKey *)collectionKey
                   withRowid:(int64_t)rowid;
 
-- (void)handleWillReplaceMetadata:(id)metadata
-             forCollectionKey:(YapCollectionKey *)collectionKey
-                    withRowid:(int64_t)rowid;
+- (void)willRemoveObjectForCollectionKey:(YapCollectionKey *)collectionKey withRowid:(int64_t)rowid;
 
-- (void)handleWillRemoveObjectForCollectionKey:(YapCollectionKey *)collectionKey withRowid:(int64_t)rowid;
+- (void)willRemoveObjectsForKeys:(NSArray *)keys inCollection:(NSString *)collection withRowids:(NSArray *)rowids;
 
-- (void)handleWillRemoveObjectsForKeys:(NSArray *)keys inCollection:(NSString *)collection withRowids:(NSArray *)rowids;
-
-- (void)handleWillRemoveAllObjectsInAllCollections;
+- (void)willRemoveAllObjectsInAllCollections;
 
 
 #pragma mark Configuration Values

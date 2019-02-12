@@ -24,6 +24,10 @@
 @synthesize kdfIterNumber = kdfIterNumber;
 @synthesize cipherDefaultkdfIterNumber = cipherDefaultkdfIterNumber;
 @synthesize cipherPageSize = cipherPageSize;
+@synthesize cipherSaltBlock = cipherSaltBlock;
+@synthesize cipherKeySpecBlock = cipherKeySpecBlock;
+@synthesize cipherUnencryptedHeaderLength = cipherUnencryptedHeaderLength;
+
 #endif
 @synthesize aggressiveWALTruncationSize = aggressiveWALTruncationSize;
 @synthesize enableMultiProcessSupport = enableMultiProcessSupport;
@@ -37,7 +41,7 @@
 		pragmaJournalSizeLimit = 0;
 		pragmaPageSize = 0;
 		pragmaMMapSize = 0;
-		aggressiveWALTruncationSize = (1024 * 1024); // 1 MB
+		aggressiveWALTruncationSize = (1024 * 1024 * 4); // 4 MB
         enableMultiProcessSupport = NO;
 	}
 	return self;
@@ -56,6 +60,9 @@
     copy->kdfIterNumber = kdfIterNumber;
     copy->cipherDefaultkdfIterNumber = cipherDefaultkdfIterNumber;
     copy->cipherPageSize = cipherPageSize;
+    copy->cipherSaltBlock = cipherSaltBlock;
+    copy->cipherKeySpecBlock = cipherKeySpecBlock;
+    copy->cipherUnencryptedHeaderLength = cipherUnencryptedHeaderLength;
 #endif
 	copy->aggressiveWALTruncationSize = aggressiveWALTruncationSize;
     copy->enableMultiProcessSupport = enableMultiProcessSupport;

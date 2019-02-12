@@ -1,6 +1,4 @@
-YapDatabase
-===========
-
+![YapDatabaseLogo](https://user-images.githubusercontent.com/449168/27611211-2570fbb6-5b46-11e7-85e9-f3378a5bebce.gif)
 [![Build Status](https://travis-ci.org/yapstudios/YapDatabase.svg?branch=master)](https://travis-ci.org/yapstudios/YapDatabase)
 [![Pod Version](https://img.shields.io/cocoapods/v/YapDatabase.svg?style=flat)](https://cocoapods.org/pods/YapDatabase)
 [![Carthage compatible](https://img.shields.io/badge/Carthage-compatible-4BC51D.svg?style=flat)](https://github.com/Carthage/Carthage)
@@ -29,8 +27,6 @@ It has the following features:
 * **Extensions**. More than just a key/value store, YapDatabase comes with an extensions architecture built-in. You can even create your own extensions.
  
 * **Performance**. Fetch thousands of objects on the main thread without dropping a frame.
-
-* **Objective-C**. A simple to use Objective-C API means you'll be up and running in no time.
 
 <br/>
 

@@ -10,8 +10,11 @@ framework module YapDatabase {
 	header "YapDatabaseExtensionTypes.h"
 	
 	module Utilities {
+		header "YapBidirectionalCache.h"
 		header "YapCache.h"
 		header "YapCollectionKey.h"
+		header "YapDatabaseAtomic.h"
+		header "YapDatabaseConnectionConfig.h"
 		header "YapDatabaseQuery.h"
 		header "YapMurmurHash.h"
 		header "YapProxyObject.h"
@@ -19,12 +22,15 @@ framework module YapDatabase {
 		header "YapWhitelistBlacklist.h"
 		header "YapMutationStack.h"
 	}
-	
+
+	explicit module YapDatabaseExtensionPrivate {
+		header "YapDatabaseExtensionPrivate.h"
+	}
+
 	// Extension: View
 	
 	explicit module YapDatabaseView {
 		header "YapDatabaseView.h"
-		header "YapDatabaseViewTypes.h"
 		header "YapDatabaseViewOptions.h"
 		header "YapDatabaseViewConnection.h"
 		header "YapDatabaseViewTransaction.h"
@@ -32,7 +38,18 @@ framework module YapDatabase {
 		header "YapDatabaseViewChange.h"
 		header "YapDatabaseViewRangeOptions.h"
 	}
-	
+
+	// Extension: AutoView
+
+	explicit module YapDatabaseAutoView {
+		header "YapDatabaseViewTypes.h"
+		header "YapDatabaseAutoView.h"
+		header "YapDatabaseAutoViewConnection.h"
+		header "YapDatabaseAutoViewTransaction.h"
+
+		export YapDatabaseView
+	}
+
 	// Extension: FilteredView
 	
 	explicit module YapDatabaseFilteredView {
@@ -56,7 +73,7 @@ framework module YapDatabase {
 	}
 	
 	// Extension: SecondaryIndex
-	
+
 	explicit module YapDatabaseSecondaryIndex {
 		header "YapDatabaseSecondaryIndex.h"
 		header "YapDatabaseSecondaryIndexSetup.h"
@@ -128,6 +145,12 @@ framework module YapDatabase {
 		header "YapDatabaseConnectionProxy.h"
 	}
 	
+	// Extension: ConnectionPool
+	
+	explicit module YapDatabaseConnectionPool {
+		header "YapDatabaseConnectionPool.h"
+	}
+	
 	// Extension: ActionManager
 	
 	explicit module YapDatabaseActionManager {
@@ -145,5 +168,28 @@ framework module YapDatabase {
 		header "YapDatabaseCrossProcessNotification.h"
 		header "YapDatabaseCrossProcessNotificationConnection.h"
 		header "YapDatabaseCrossProcessNotificationTransaction.h"
+	}
+	
+	// Extension: CloudCore
+	
+	explicit module YapDatabaseCloudCore {
+		header "YapDatabaseCloudCore.h"
+		header "YapDatabaseCloudCoreOptions.h"
+		header "YapDatabaseCloudCoreConnection.h"
+		header "YapDatabaseCloudCoreTransaction.h"
+		header "YapManyToManyCache.h"
+		header "YapDatabaseCloudCoreOperation.h"
+		header "YapDatabaseCloudCorePipelineDelegate.h"
+		header "YapDatabaseCloudCorePipeline.h"
+		header "YapDatabaseCloudCoreGraph.h"
+	}
+
+	explicit module YapDatabaseCloudCorePrivate {
+		header "YapDatabaseCloudCorePrivate.h"
+		header "YapDatabaseCloudCoreOperationPrivate.h"
+		header "YapDatabaseCloudCorePipelinePrivate.h"
+		header "YapDatabaseCloudCoreGraphPrivate.h"
+		
+		export YapDatabaseExtensionPrivate
 	}
 }

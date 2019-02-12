@@ -11,9 +11,9 @@
 #import "YapSet.h"
 #import "YapTouch.h"
 
-#import <objc/runtime.h>
 #import <mach/mach_time.h>
-#import <libkern/OSAtomic.h>
+#import <objc/runtime.h>
+#import <stdatomic.h>
 
 #if TARGET_OS_IOS || TARGET_OS_TV
 #import <UIKit/UIKit.h>
@@ -108,6 +108,8 @@ static int connectionBusyHandler(void *ptr, int count)
 	BOOL extensionsReady;
 	id sharedKeySetForExtensions;
 	
+	atomic_ullong pendingTransactionCount;
+	
 	sqlite3_stmt *beginTransactionStatement;
 	sqlite3_stmt *beginImmediateTransactionStatement;
 	sqlite3_stmt *commitTransactionStatement;
@@ -148,10 +150,6 @@ static int connectionBusyHandler(void *ptr, int count)
 	sqlite3_stmt *enumerateKeysAndObjectsInAllCollectionsStatement;
 	sqlite3_stmt *enumerateRowsInCollectionStatement;
 	sqlite3_stmt *enumerateRowsInAllCollectionsStatement;
-	
-	OSSpinLock lock;
-	BOOL writeQueueSuspended;
-	BOOL activeReadWriteTransaction;
 }
 
 + (void)load
@@ -185,6 +183,11 @@ static int connectionBusyHandler(void *ptr, int count)
 
 - (id)initWithDatabase:(YapDatabase *)inDatabase
 {
+	return [self initWithDatabase:inDatabase config:nil];
+}
+
+- (instancetype)initWithDatabase:(YapDatabase *)inDatabase config:(YapDatabaseConnectionConfig *)inConfig
+{
 	if ((self = [super init]))
 	{
 		database = inDatabase;
@@ -212,7 +215,7 @@ static int connectionBusyHandler(void *ptr, int count)
 		
 		enableMultiProcessSupport = options.enableMultiProcessSupport;
 		
-		YapDatabaseConnectionDefaults *defaults = [database connectionDefaults];
+		YapDatabaseConnectionConfig *defaults = inConfig ?: database.connectionDefaults;
 		
 		objectCacheLimit = defaults.objectCacheLimit;
 		metadataCacheLimit = defaults.metadataCacheLimit;
@@ -252,8 +255,6 @@ static int connectionBusyHandler(void *ptr, int count)
 		#if TARGET_OS_IOS || TARGET_OS_TV
 		self.autoFlushMemoryFlags = defaults.autoFlushMemoryFlags;
 		#endif
-		
-		lock = OS_SPINLOCK_INIT;
 		
 		BOOL recycled = [database connectionPoolDequeue:&db main_file:&main_file wal_file:&wal_file];
 		if (recycled)
@@ -393,17 +394,33 @@ static int connectionBusyHandler(void *ptr, int count)
 	extensionsReady = ([registeredExtensions count] == 0);
 }
 
+- (NSString *)description
+{
+    // If the user has a name then lets use it for printing
+    // Will look something like this <YapDatabaseConnection: 0x7f85e0e62300> - ConnectionName
+    
+    if (_name.length > 0) {
+        return [NSString stringWithFormat:@"%@ - %@", [super description], _name];
+    } else {
+        return [super description];
+    }
+}
+
 - (void)dealloc
 {
 	YDBLogVerbose(@"Dealloc <YapDatabaseConnection %p: databaseName=%@>",
 	              self, [database.databasePath lastPathComponent]);
 	
 	dispatch_block_t block = ^{ @autoreleasepool {
+	#pragma clang diagnostic push // silence warnings: synchronous access
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		if (longLivedReadTransaction) {
 			[self postReadTransaction:longLivedReadTransaction];
 			longLivedReadTransaction = nil;
 		}
+		
+	#pragma clang diagnostic pop
 	}};
 	
 	if (dispatch_get_specific(IsOnConnectionQueueKey))
@@ -459,6 +476,7 @@ static int connectionBusyHandler(void *ptr, int count)
 - (void)_flushStatements
 {
 	sqlite_finalize_null(&beginTransactionStatement);
+	sqlite_finalize_null(&beginImmediateTransactionStatement);
 	sqlite_finalize_null(&commitTransactionStatement);
 	sqlite_finalize_null(&rollbackTransactionStatement);
 	
@@ -569,6 +587,15 @@ static int connectionBusyHandler(void *ptr, int count)
 @synthesize database = database;
 @synthesize name = _name;
 
+@dynamic objectCacheEnabled;
+@dynamic objectCacheLimit;
+
+@dynamic metadataCacheEnabled;
+@dynamic metadataCacheLimit;
+
+@dynamic objectPolicy;
+@dynamic metadataPolicy;
+
 #if YapDatabaseEnforcePermittedTransactions
 @synthesize permittedTransactions = _mustUseAtomicProperty_permittedTransactions;
 #endif
@@ -577,12 +604,20 @@ static int connectionBusyHandler(void *ptr, int count)
 @synthesize autoFlushMemoryFlags;
 #endif
 
+@dynamic snapshot;
+@dynamic pendingTransactionCount;
+
 - (BOOL)objectCacheEnabled
 {
 	__block BOOL result = NO;
 	
 	dispatch_block_t block = ^{
+	#pragma clang diagnostic push // silence warnings: synchronous access
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
+		
 		result = (objectCache != nil);
+		
+	#pragma clang diagnostic pop
 	};
 	
 	if (dispatch_get_specific(IsOnConnectionQueueKey))
@@ -596,6 +631,8 @@ static int connectionBusyHandler(void *ptr, int count)
 - (void)setObjectCacheEnabled:(BOOL)flag
 {
 	dispatch_block_t block = ^{
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		if (flag) // Enabled
 		{
@@ -610,6 +647,8 @@ static int connectionBusyHandler(void *ptr, int count)
 		}
 		
 		keyCache.countLimit = [self calculateKeyCacheLimit];
+		
+	#pragma clang diagnostic pop
 	};
 	
 	if (dispatch_get_specific(IsOnConnectionQueueKey))
@@ -623,7 +662,12 @@ static int connectionBusyHandler(void *ptr, int count)
 	__block NSUInteger result = 0;
 	
 	dispatch_block_t block = ^{
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
+		
 		result = objectCacheLimit;
+		
+	#pragma clang diagnostic pop
 	};
 	
 	if (dispatch_get_specific(IsOnConnectionQueueKey))
@@ -637,6 +681,8 @@ static int connectionBusyHandler(void *ptr, int count)
 - (void)setObjectCacheLimit:(NSUInteger)newObjectCacheLimit
 {
 	dispatch_block_t block = ^{
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		if (objectCacheLimit != newObjectCacheLimit)
 		{
@@ -652,6 +698,8 @@ static int connectionBusyHandler(void *ptr, int count)
 				keyCache.countLimit = [self calculateKeyCacheLimit];
 			}
 		}
+		
+	#pragma clang diagnostic pop
 	};
 	
 	if (dispatch_get_specific(IsOnConnectionQueueKey))
@@ -665,7 +713,12 @@ static int connectionBusyHandler(void *ptr, int count)
 	__block BOOL result = NO;
 	
 	dispatch_block_t block = ^{
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
+		
 		result = (metadataCache != nil);
+		
+	#pragma clang diagnostic pop
 	};
 	
 	if (dispatch_get_specific(IsOnConnectionQueueKey))
@@ -679,6 +732,8 @@ static int connectionBusyHandler(void *ptr, int count)
 - (void)setMetadataCacheEnabled:(BOOL)flag
 {
 	dispatch_block_t block = ^{
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		if (flag) // Enabled
 		{
@@ -693,6 +748,8 @@ static int connectionBusyHandler(void *ptr, int count)
 		}
 		
 		keyCache.countLimit = [self calculateKeyCacheLimit];
+		
+	#pragma clang diagnostic pop
 	};
 	
 	if (dispatch_get_specific(IsOnConnectionQueueKey))
@@ -706,7 +763,12 @@ static int connectionBusyHandler(void *ptr, int count)
 	__block NSUInteger result = 0;
 	
 	dispatch_block_t block = ^{
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
+		
 		result = metadataCacheLimit;
+		
+	#pragma clang diagnostic pop
 	};
 	
 	if (dispatch_get_specific(IsOnConnectionQueueKey))
@@ -720,6 +782,8 @@ static int connectionBusyHandler(void *ptr, int count)
 - (void)setMetadataCacheLimit:(NSUInteger)newMetadataCacheLimit
 {
 	dispatch_block_t block = ^{
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		if (metadataCacheLimit != newMetadataCacheLimit)
 		{
@@ -735,6 +799,8 @@ static int connectionBusyHandler(void *ptr, int count)
 				keyCache.countLimit = [self calculateKeyCacheLimit];
 			}
 		}
+		
+	#pragma clang diagnostic pop
 	};
 	
 	if (dispatch_get_specific(IsOnConnectionQueueKey))
@@ -748,7 +814,12 @@ static int connectionBusyHandler(void *ptr, int count)
 	__block YapDatabasePolicy policy = YapDatabasePolicyContainment;
 	
 	dispatch_block_t block = ^{
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
+		
 		policy = objectPolicy;
+		
+	#pragma clang diagnostic pop
 	};
 	
 	if (dispatch_get_specific(IsOnConnectionQueueKey))
@@ -762,6 +833,8 @@ static int connectionBusyHandler(void *ptr, int count)
 - (void)setObjectPolicy:(YapDatabasePolicy)newObjectPolicy
 {
 	dispatch_block_t block = ^{
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		// sanity check
 		switch (newObjectPolicy)
@@ -771,6 +844,8 @@ static int connectionBusyHandler(void *ptr, int count)
 			case YapDatabasePolicyCopy        : objectPolicy = newObjectPolicy; break;
 			default                           : objectPolicy = YapDatabasePolicyContainment;
 		}
+		
+	#pragma clang diagnostic pop
 	};
 	
 	if (dispatch_get_specific(IsOnConnectionQueueKey))
@@ -784,7 +859,12 @@ static int connectionBusyHandler(void *ptr, int count)
 	__block YapDatabasePolicy policy = YapDatabasePolicyContainment;
 	
 	dispatch_block_t block = ^{
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
+		
 		policy = metadataPolicy;
+		
+	#pragma clang diagnostic pop
 	};
 	
 	if (dispatch_get_specific(IsOnConnectionQueueKey))
@@ -798,6 +878,8 @@ static int connectionBusyHandler(void *ptr, int count)
 - (void)setMetadataPolicy:(YapDatabasePolicy)newMetadataPolicy
 {
 	dispatch_block_t block = ^{
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		// sanity check
 		switch (newMetadataPolicy)
@@ -807,6 +889,8 @@ static int connectionBusyHandler(void *ptr, int count)
 			case YapDatabasePolicyCopy        : metadataPolicy = newMetadataPolicy; break;
 			default                           : metadataPolicy = YapDatabasePolicyContainment;
 		}
+		
+	#pragma clang diagnostic pop
 	};
 	
 	if (dispatch_get_specific(IsOnConnectionQueueKey))
@@ -820,7 +904,12 @@ static int connectionBusyHandler(void *ptr, int count)
 	__block uint64_t result = 0;
 	
 	dispatch_block_t block = ^{
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
+		
 		result = snapshot;
+		
+	#pragma clang diagnostic pop
 	};
 	
 	if (dispatch_get_specific(IsOnConnectionQueueKey))
@@ -828,6 +917,12 @@ static int connectionBusyHandler(void *ptr, int count)
 	else
 		dispatch_sync(connectionQueue, block);
 	
+	return result;
+}
+
+- (uint64_t)pendingTransactionCount
+{
+	uint64_t result = atomic_load_explicit(&pendingTransactionCount, memory_order_relaxed);
 	return result;
 }
 
@@ -878,6 +973,54 @@ static int connectionBusyHandler(void *ptr, int count)
 	}
 	
 	return keyCacheLimit;
+}
+
+- (YapDatabaseConnectionConfig *)copyConfig
+{
+	YapDatabaseConnectionConfig *config = [[YapDatabaseConnectionConfig alloc] init];
+	
+	dispatch_block_t block = ^{
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
+		
+		config.objectCacheEnabled = (objectCache != nil);
+		config.objectCacheLimit = objectCacheLimit;
+		
+		config.metadataCacheEnabled = (metadataCache != nil);
+		config.metadataCacheLimit = metadataCacheLimit;
+		
+		config.objectPolicy = objectPolicy;
+		config.metadataPolicy = metadataPolicy;
+		
+	#if TARGET_OS_IOS || TARGET_OS_TV
+		config.autoFlushMemoryFlags = self.autoFlushMemoryFlags;
+	#endif
+		
+	#pragma clang diagnostic pop
+	};
+	
+	if (dispatch_get_specific(IsOnConnectionQueueKey))
+		block();
+	else
+		dispatch_sync(connectionQueue, block);
+	
+	return config;
+}
+
+- (void)applyConfig:(YapDatabaseConnectionConfig *)config
+{
+	self.objectCacheEnabled = config.objectCacheEnabled;
+	self.objectCacheLimit = config.objectCacheLimit;
+	
+	self.metadataCacheEnabled = config.metadataCacheEnabled;
+	self.metadataCacheLimit = config.metadataCacheLimit;
+	
+	self.objectPolicy = config.objectPolicy;
+	self.metadataPolicy = config.metadataPolicy;
+	
+#if TARGET_OS_IOS || TARGET_OS_TV
+	self.autoFlushMemoryFlags = config.autoFlushMemoryFlags;
+#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1376,7 +1519,9 @@ static int connectionBusyHandler(void *ptr, int count)
 {
 	sqlite3_stmt **statement = &enumerateCollectionsStatement;
 	
-	sqlite3_stmt* (^CreateStatement)() = ^{
+	sqlite3_stmt* (^CreateStatement)(void) = ^{
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		const char *stmt = "SELECT DISTINCT \"collection\" FROM \"database2\";";
 		int stmtLen = (int)strlen(stmt);
@@ -1389,6 +1534,8 @@ static int connectionBusyHandler(void *ptr, int count)
 		}
 		
 		return result;
+		
+	#pragma clang diagnostic pop
 	};
 	
 	BOOL needsFinalize = NO;
@@ -1417,7 +1564,9 @@ static int connectionBusyHandler(void *ptr, int count)
 {
 	sqlite3_stmt **statement = &enumerateCollectionsForKeyStatement;
 	
-	sqlite3_stmt* (^CreateStatement)() = ^{
+	sqlite3_stmt* (^CreateStatement)(void) = ^{
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		const char *stmt = "SELECT \"collection\" FROM \"database2\" WHERE \"key\" = ?;";
 		int stmtLen = (int)strlen(stmt);
@@ -1430,6 +1579,8 @@ static int connectionBusyHandler(void *ptr, int count)
 		}
 		
 		return result;
+		
+	#pragma clang diagnostic pop
 	};
 	
 	BOOL needsFinalize = NO;
@@ -1458,7 +1609,9 @@ static int connectionBusyHandler(void *ptr, int count)
 {
 	sqlite3_stmt **statement = &enumerateKeysInCollectionStatement;
 	
-	sqlite3_stmt* (^CreateStatement)() = ^{
+	sqlite3_stmt* (^CreateStatement)(void) = ^{
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		const char *stmt = "SELECT \"rowid\", \"key\" FROM \"database2\" WHERE \"collection\" = ?;";
 		int stmtLen = (int)strlen(stmt);
@@ -1471,6 +1624,8 @@ static int connectionBusyHandler(void *ptr, int count)
 		}
 		
 		return result;
+		
+	#pragma clang diagnostic pop
 	};
 	
 	BOOL needsFinalize = NO;
@@ -1499,7 +1654,9 @@ static int connectionBusyHandler(void *ptr, int count)
 {
 	sqlite3_stmt **statement = &enumerateKeysInAllCollectionsStatement;
 	
-	sqlite3_stmt* (^CreateStatement)() = ^{
+	sqlite3_stmt* (^CreateStatement)(void) = ^{
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		const char *stmt = "SELECT \"rowid\", \"collection\", \"key\" FROM \"database2\";";
 		int stmtLen = (int)strlen(stmt);
@@ -1512,6 +1669,8 @@ static int connectionBusyHandler(void *ptr, int count)
 		}
 		
 		return result;
+		
+	#pragma clang diagnostic pop
 	};
 	
 	BOOL needsFinalize = NO;
@@ -1540,7 +1699,9 @@ static int connectionBusyHandler(void *ptr, int count)
 {
 	sqlite3_stmt **statement = &enumerateKeysAndMetadataInCollectionStatement;
 	
-	sqlite3_stmt* (^CreateStatement)() = ^{
+	sqlite3_stmt* (^CreateStatement)(void) = ^{
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		const char *stmt = "SELECT \"rowid\", \"key\", \"metadata\" FROM \"database2\" WHERE collection = ?;";
 		int stmtLen = (int)strlen(stmt);
@@ -1553,6 +1714,8 @@ static int connectionBusyHandler(void *ptr, int count)
 		}
 		
 		return result;
+		
+	#pragma clang diagnostic pop
 	};
 	
 	BOOL needsFinalize = NO;
@@ -1581,7 +1744,9 @@ static int connectionBusyHandler(void *ptr, int count)
 {
 	sqlite3_stmt **statement = &enumerateKeysAndMetadataInAllCollectionsStatement;
 	
-	sqlite3_stmt* (^CreateStatement)() = ^{
+	sqlite3_stmt* (^CreateStatement)(void) = ^{
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		const char *stmt = "SELECT \"rowid\", \"collection\", \"key\", \"metadata\""
 		                   " FROM \"database2\" ORDER BY \"collection\" ASC;";
@@ -1595,6 +1760,8 @@ static int connectionBusyHandler(void *ptr, int count)
 		}
 		
 		return result;
+		
+	#pragma clang diagnostic pop
 	};
 	
 	BOOL needsFinalize = NO;
@@ -1623,7 +1790,9 @@ static int connectionBusyHandler(void *ptr, int count)
 {
 	sqlite3_stmt **statement = &enumerateKeysAndObjectsInCollectionStatement;
 	
-	sqlite3_stmt* (^CreateStatement)() = ^{
+	sqlite3_stmt* (^CreateStatement)(void) = ^{
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		const char *stmt = "SELECT \"rowid\", \"key\", \"data\" FROM \"database2\" WHERE \"collection\" = ?;";
 		int stmtLen = (int)strlen(stmt);
@@ -1636,6 +1805,8 @@ static int connectionBusyHandler(void *ptr, int count)
 		}
 		
 		return result;
+		
+	#pragma clang diagnostic pop
 	};
 	
 	BOOL needsFinalize = NO;
@@ -1664,7 +1835,9 @@ static int connectionBusyHandler(void *ptr, int count)
 {
 	sqlite3_stmt **statement = &enumerateKeysAndObjectsInAllCollectionsStatement;
 	
-	sqlite3_stmt* (^CreateStatement)() = ^{
+	sqlite3_stmt* (^CreateStatement)(void) = ^{
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		const char *stmt = "SELECT \"rowid\", \"collection\", \"key\", \"data\""
 		                   " FROM \"database2\" ORDER BY \"collection\" ASC;";
@@ -1678,6 +1851,8 @@ static int connectionBusyHandler(void *ptr, int count)
 		}
 		
 		return result;
+		
+	#pragma clang diagnostic pop
 	};
 	
 	BOOL needsFinalize = NO;
@@ -1706,7 +1881,9 @@ static int connectionBusyHandler(void *ptr, int count)
 {
 	sqlite3_stmt **statement = &enumerateRowsInCollectionStatement;
 	
-	sqlite3_stmt* (^CreateStatement)() = ^{
+	sqlite3_stmt* (^CreateStatement)(void) = ^{
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		const char *stmt = "SELECT \"rowid\", \"key\", \"data\", \"metadata\""
 		                   " FROM \"database2\" WHERE \"collection\" = ?;";
@@ -1720,6 +1897,8 @@ static int connectionBusyHandler(void *ptr, int count)
 		}
 		
 		return result;
+		
+	#pragma clang diagnostic pop
 	};
 	
 	BOOL needsFinalize = NO;
@@ -1748,7 +1927,9 @@ static int connectionBusyHandler(void *ptr, int count)
 {
 	sqlite3_stmt **statement = &enumerateRowsInAllCollectionsStatement;
 	
-	sqlite3_stmt* (^CreateStatement)() = ^{
+	sqlite3_stmt* (^CreateStatement)(void) = ^{
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		const char *stmt = "SELECT \"rowid\", \"collection\", \"key\", \"data\", \"metadata\""
 		                   " FROM \"database2\" ORDER BY \"collection\" ASC;";
@@ -1762,6 +1943,8 @@ static int connectionBusyHandler(void *ptr, int count)
 		}
 		
 		return result;
+		
+	#pragma clang diagnostic pop
 	};
 	
 	BOOL needsFinalize = NO;
@@ -1828,7 +2011,17 @@ static int connectionBusyHandler(void *ptr, int count)
 	}
 #endif
 	
+	atomic_fetch_add_explicit(&pendingTransactionCount, (uint64_t)1, memory_order_relaxed);
 	dispatch_sync(connectionQueue, ^{ @autoreleasepool {
+		
+	// IMPORTANT:
+	// We are purposefully retaining self here.
+	// Here are the rules:
+	// - a YapDatabaseConnection instance cannot be deallocated if there are existing/pending transactions
+	// - a YapDatabase instance cannot be deallocated if there are existing connections
+	//
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		if (longLivedReadTransaction)
 		{
@@ -1842,6 +2035,10 @@ static int connectionBusyHandler(void *ptr, int count)
 			block(transaction);
 			[self postReadTransaction:transaction];
 		}
+		
+		atomic_fetch_sub_explicit(&pendingTransactionCount, (uint64_t)1, memory_order_relaxed);
+		
+	#pragma clang diagnostic pop
 	}});
 }
 
@@ -1888,7 +2085,17 @@ static int connectionBusyHandler(void *ptr, int count)
 	// Once we're inside the database writeQueue, we know that we are the only write transaction.
 	// No other transaction can possibly modify the database except us, even in other connections.
 	
+	atomic_fetch_add_explicit(&pendingTransactionCount, (uint64_t)1, memory_order_relaxed);
 	dispatch_sync(connectionQueue, ^{
+	
+	// IMPORTANT:
+	// We are purposefully retaining self here.
+	// Here are the rules:
+	// - a YapDatabaseConnection instance cannot be deallocated if there are existing/pending transactions
+	// - a YapDatabase instance cannot be deallocated if there are existing connections
+	//
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		if (longLivedReadTransaction)
 		{
@@ -1905,7 +2112,6 @@ static int connectionBusyHandler(void *ptr, int count)
 			}
 		}
 		
-		__preWriteQueue(self);
 		dispatch_sync(database->writeQueue, ^{ @autoreleasepool {
 			
 			YapDatabaseReadWriteTransaction *transaction = [self newReadWriteTransaction];
@@ -1914,9 +2120,24 @@ static int connectionBusyHandler(void *ptr, int count)
 			block(transaction);
 			[self postReadWriteTransaction:transaction];
 			
+			if (transaction->completionBlockStack)
+			{
+				NSUInteger count = transaction->completionBlockStack.count;
+				for (NSUInteger i = 0; i < count; i++)
+				{
+					dispatch_queue_t stackItemQueue = transaction->completionQueueStack[i];
+					dispatch_block_t stackItemBlock = transaction->completionBlockStack[i];
+					
+					dispatch_async(stackItemQueue, stackItemBlock);
+				}
+			}
+			
 		}}); // End dispatch_sync(database->writeQueue)
-		__postWriteQueue(self);
-	});      // End dispatch_sync(connectionQueue)
+		
+		atomic_fetch_sub_explicit(&pendingTransactionCount, (uint64_t)1, memory_order_relaxed);
+		
+	#pragma clang diagnostic pop
+	}); // End dispatch_sync(connectionQueue)
 }
 
 /**
@@ -1977,10 +2198,17 @@ static int connectionBusyHandler(void *ptr, int count)
 	}
 #endif
 	
-	if (completionQueue == NULL && completionBlock != NULL)
-		completionQueue = dispatch_get_main_queue();
-	
+	atomic_fetch_add_explicit(&pendingTransactionCount, (uint64_t)1, memory_order_relaxed);
 	dispatch_async(connectionQueue, ^{ @autoreleasepool {
+	
+	// IMPORTANT:
+	// We are purposefully retaining self here.
+	// Here are the rules:
+	// - a YapDatabaseConnection instance cannot be deallocated if there are existing/pending transactions
+	// - a YapDatabase instance cannot be deallocated if there are existing connections
+	//
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		if (longLivedReadTransaction)
 		{
@@ -1995,8 +2223,13 @@ static int connectionBusyHandler(void *ptr, int count)
 			[self postReadTransaction:transaction];
 		}
 		
-		if (completionBlock)
-			dispatch_async(completionQueue, completionBlock);
+		if (completionBlock) {
+			dispatch_async(completionQueue ?: dispatch_get_main_queue(), completionBlock);
+		}
+		
+		atomic_fetch_sub_explicit(&pendingTransactionCount, (uint64_t)1, memory_order_relaxed);
+		
+	#pragma clang diagnostic pop
 	}});
 }
 
@@ -2060,9 +2293,6 @@ static int connectionBusyHandler(void *ptr, int count)
 	}
 #endif
 	
-	if (completionQueue == NULL && completionBlock != NULL)
-		completionQueue = dispatch_get_main_queue();
-	
 	// Order matters.
 	// First go through the serial connection queue.
 	// Then go through serial write queue for the database.
@@ -2070,7 +2300,17 @@ static int connectionBusyHandler(void *ptr, int count)
 	// Once we're inside the database writeQueue, we know that we are the only write transaction.
 	// No other transaction can possibly modify the database except us, even in other connections.
 	
+	atomic_fetch_add_explicit(&pendingTransactionCount, (uint64_t)1, memory_order_relaxed);
 	dispatch_async(connectionQueue, ^{
+		
+	// IMPORTANT:
+	// We are purposefully retaining self here.
+	// Here are the rules:
+	// - a YapDatabaseConnection instance cannot be deallocated if there are existing/pending transactions
+	// - a YapDatabase instance cannot be deallocated if there are existing connections
+	//
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		if (longLivedReadTransaction)
 		{
@@ -2087,7 +2327,6 @@ static int connectionBusyHandler(void *ptr, int count)
 			}
 		}
 		
-		__preWriteQueue(self);
 		dispatch_sync(database->writeQueue, ^{ @autoreleasepool {
 			
 			YapDatabaseReadWriteTransaction *transaction = [self newReadWriteTransaction];
@@ -2096,12 +2335,28 @@ static int connectionBusyHandler(void *ptr, int count)
 			block(transaction);
 			[self postReadWriteTransaction:transaction];
 			
-			if (completionBlock)
-				dispatch_async(completionQueue, completionBlock);
+			if (transaction->completionBlockStack)
+			{
+				NSUInteger count = transaction->completionBlockStack.count;
+				for (NSUInteger i = 0; i < count; i++)
+				{
+					dispatch_queue_t stackItemQueue = transaction->completionQueueStack[i];
+					dispatch_block_t stackItemBlock = transaction->completionBlockStack[i];
+					
+					dispatch_async(stackItemQueue, stackItemBlock);
+				}
+			}
+			
+			if (completionBlock) {
+				dispatch_async(completionQueue ?: dispatch_get_main_queue(), completionBlock);
+			}
 			
 		}}); // End dispatch_sync(database->writeQueue)
-		__postWriteQueue(self);
-	});      // End dispatch_async(connectionQueue)
+		
+		atomic_fetch_sub_explicit(&pendingTransactionCount, (uint64_t)1, memory_order_relaxed);
+		
+	#pragma clang diagnostic pop
+	}); // End dispatch_async(connectionQueue)
 }
 
 /**
@@ -2129,12 +2384,9 @@ static int connectionBusyHandler(void *ptr, int count)
 {
 	if (completionBlock == NULL) return;
 	
-	if (completionQueue == NULL && completionBlock != NULL)
-		completionQueue = dispatch_get_main_queue();
-	
 	dispatch_async(connectionQueue, ^{
 		
-		dispatch_async(completionQueue, completionBlock);
+		dispatch_async(completionQueue ?: dispatch_get_main_queue(), completionBlock);
 	});
 }
 
@@ -2197,6 +2449,8 @@ static int connectionBusyHandler(void *ptr, int count)
 	__block NSArray *changesets = nil;
 	
 	dispatch_sync(database->snapshotQueue, ^{ @autoreleasepool {
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		// Pre-Read-Transaction: Step 3 of 6
 		//
@@ -2316,6 +2570,8 @@ static int connectionBusyHandler(void *ptr, int count)
 		
 		myState->lastTransactionSnapshot = dbSnapshot;
 		myState->lastTransactionTime = mach_absolute_time();
+		
+	#pragma clang diagnostic pop
 	}});
 	
 	// Pre-Read-Transaction: Setp 5 of 6
@@ -2393,7 +2649,10 @@ static int connectionBusyHandler(void *ptr, int count)
 	__block uint64_t minSnapshot = 0;
 	__block YapDatabaseConnectionState *writeStateToSignal = nil;
 	
-	dispatch_sync(database->snapshotQueue, ^{ @autoreleasepool {
+	// dispatch_sync: database->snapshotQueue
+	dispatch_block_t block = ^{ @autoreleasepool {
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		// Post-Read-Transaction: Step 3 of 5
 		//
@@ -2457,7 +2716,21 @@ static int connectionBusyHandler(void *ptr, int count)
 		}
 		
 		YDBLogVerbose(@"YapDatabaseConnection(%p) completing read-only transaction.", self);
-	}});
+		
+	#pragma clang diagnostic pop
+	}};
+	
+	// Edge case protection:
+	// This method may be called from dealloc.
+	// Which may, in turn, mean we're already in the snapshotQueue.
+	//
+	// @see Issue #437
+	// https://github.com/yapstudios/YapDatabase/issues/437
+	//
+	if (dispatch_get_specific(database->IsOnSnapshotQueueKey))
+		block();
+	else
+		dispatch_sync(database->snapshotQueue, block);
 	
 	// Post-Read-Transaction: Step 4 of 5
 	//
@@ -2550,6 +2823,8 @@ static int connectionBusyHandler(void *ptr, int count)
 	__block NSArray *changesets = nil;
 	
 	dispatch_sync(database->snapshotQueue, ^{ @autoreleasepool {
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		// Pre-Write-Transaction: Step 4 of 7
 		//
@@ -2625,6 +2900,8 @@ static int connectionBusyHandler(void *ptr, int count)
 		needsMarkSqlLevelSharedReadLock = NO;
 		
 		YDBLogVerbose(@"YapDatabaseConnection(%p) starting read-write transaction.", self);
+		
+	#pragma clang diagnostic pop
 	}});
 	
 	// Pre-Write-Transaction: Step 6 of 7
@@ -2676,6 +2953,9 @@ static int connectionBusyHandler(void *ptr, int count)
 	if (metadataChanges == nil)
 		metadataChanges = [[NSMutableDictionary alloc] init];
 	
+	if (insertedKeys == nil)
+		insertedKeys = [[NSMutableSet alloc] init];
+	
 	if (removedKeys == nil)
 		removedKeys = [[NSMutableSet alloc] init];
 	
@@ -2711,7 +2991,9 @@ static int connectionBusyHandler(void *ptr, int count)
 		// It is important for read-only transactions on other connections to know we're no longer a writer.
 		
 		dispatch_sync(database->snapshotQueue, ^{
-		
+		#pragma clang diagnostic push
+		#pragma clang diagnostic ignored "-Wimplicit-retain-self"
+			
 			for (YapDatabaseConnectionState *state in database->connectionStates)
 			{
 				if (state->connection == self)
@@ -2720,6 +3002,8 @@ static int connectionBusyHandler(void *ptr, int count)
 					break;
 				}
 			}
+			
+		#pragma clang diagnostic pop
 		});
 		
 		// Rollback-Write-Transaction: Step 2 of 3
@@ -2738,14 +3022,14 @@ static int connectionBusyHandler(void *ptr, int count)
 	}
 	else // if (!transaction->rollback)
 	{
-		// Post-Write-Transaction: Step 1 of 10
+		// Post-Write-Transaction: Step 1 of 11
 		//
 		// Run any pre-commit operations.
 		// This allows extensions to to perform any cleanup before the changeset is requested.
 		
 		[transaction preCommitReadWriteTransaction];
 		
-		// Post-Write-Transaction: Step 2 of 10
+		// Post-Write-Transaction: Step 2 of 11
 		//
 		// Fetch changesets.
 		// Then update the snapshot in the 'yap' database (if any changes were made).
@@ -2797,7 +3081,7 @@ static int connectionBusyHandler(void *ptr, int count)
 			[changeset setObject:notification forKey:YapDatabaseNotificationKey];
 		}
 		
-		// Post-Write-Transaction: Step 3 of 10
+		// Post-Write-Transaction: Step 3 of 11
 		//
 		// Auto-drop tables from previous extensions that aren't being used anymore.
 		//
@@ -2821,7 +3105,7 @@ static int connectionBusyHandler(void *ptr, int count)
 			clearPreviouslyRegisteredExtensionNames = YES;
 		}
 		
-		// Post-Write-Transaction: Step 4 of 10
+		// Post-Write-Transaction: Step 4 of 11
 		//
 		// Check to see if it's safe to commit our changes.
 		//
@@ -2849,6 +3133,8 @@ static int connectionBusyHandler(void *ptr, int count)
 			__block BOOL waitForReadOnlyTransactions = NO;
 			
 			dispatch_sync(database->snapshotQueue, ^{ @autoreleasepool {
+			#pragma clang diagnostic push
+			#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 				
 				for (YapDatabaseConnectionState *state in database->connectionStates)
 				{
@@ -2874,7 +3160,7 @@ static int connectionBusyHandler(void *ptr, int count)
 					myState->waitingForWriteLock = NO;
 					safeToCommit = YES;
 					
-					// Post-Write-Transaction: Step 5 of 10
+					// Post-Write-Transaction: Step 5 of 11
 					//
 					// Register pending changeset with database.
 					// Our commit is actually a two step process.
@@ -2900,6 +3186,7 @@ static int connectionBusyHandler(void *ptr, int count)
 					}
 				}
 				
+			#pragma clang diagnostic pop
 			}});
 		
 			if (waitForReadOnlyTransactions)
@@ -2919,7 +3206,7 @@ static int connectionBusyHandler(void *ptr, int count)
 			
 		} while (!safeToCommit);
 	
-		// Post-Write-Transaction: Step 6 of 10
+		// Post-Write-Transaction: Step 6 of 11
 		//
 		// Execute "COMMIT TRANSACTION" on database connection.
 		// This will write the changes to the WAL, and may invoke a checkpoint.
@@ -2943,8 +3230,10 @@ static int connectionBusyHandler(void *ptr, int count)
 		__block uint64_t minSnapshot = UINT64_MAX;
 	
 		dispatch_sync(database->snapshotQueue, ^{ @autoreleasepool {
+		#pragma clang diagnostic push
+		#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 			
-			// Post-Write-Transaction: Step 7 of 10
+			// Post-Write-Transaction: Step 7 of 11
 			//
 			// Notify database of changes, and drop reference to set of changed keys.
 			
@@ -2953,7 +3242,7 @@ static int connectionBusyHandler(void *ptr, int count)
 				[database noteCommittedChangeset:changeset fromConnection:self];
 			}
 			
-			// Post-Write-Transaction: Step 8 of 10
+			// Post-Write-Transaction: Step 8 of 11
 			//
 			// Update our connection state within the state table.
 			//
@@ -2972,11 +3261,13 @@ static int connectionBusyHandler(void *ptr, int count)
 			myState->waitingForWriteLock = NO;
 			
 			YDBLogVerbose(@"YapDatabaseConnection(%p) completing read-write transaction.", self);
+			
+		#pragma clang diagnostic pop
 		}});
 	
 		if (changeset)
 		{
-			// Post-Write-Transaction: Step 9 of 10
+			// Post-Write-Transaction: Step 9 of 11
 			//
 			// We added frames to the WAL.
 			// We can invoke a checkpoint if there are no other active connections.
@@ -2988,12 +3279,40 @@ static int connectionBusyHandler(void *ptr, int count)
 				[registeredMemoryTables enumerateKeysAndObjectsUsingBlock:
 				    ^(id __unused key, YapMemoryTable *memoryTable, BOOL __unused *stop)
 				{
+				#pragma clang diagnostic push
+				#pragma clang diagnostic ignored "-Wimplicit-retain-self"
+					
 					[memoryTable asyncCheckpoint:snapshot];
+					
+				#pragma clang diagnostic pop
 				}];
 			}
 		}
 	
-		// Post-Write-Transaction: Step 10 of 10
+		// Post-Write-Transaction: Step 10 of 11
+		//
+		// If the WAL has gotten too big, then we perform a checkpoint right away.
+		// We purposefuly do this BEFORE posting the notification.
+		
+		if ([database aggressiveCheckpointEnabled])
+		{
+			int totalFrameCount = 0;
+			int checkpointedFrameCount = 0;
+			
+			int checkpointResult = sqlite3_wal_checkpoint_v2(db, "main", SQLITE_CHECKPOINT_PASSIVE,
+			                                                 &totalFrameCount, &checkpointedFrameCount);
+			
+			YDBLogInfo(@"Post-checkpoint: src(d) mode(passive) result(%d) frames(%d) checkpointed(%d)",
+			           checkpointResult, totalFrameCount, checkpointedFrameCount);
+
+			
+			if (checkpointResult == SQLITE_OK)
+			{
+				[database noteCheckpointWithTotalFrames:totalFrameCount checkpointedFrames:checkpointedFrameCount];
+			}
+		}
+		
+		// Post-Write-Transaction: Step 11 of 11
 		//
 		// Post YapDatabaseModifiedNotification (if needed)
 		
@@ -3014,6 +3333,9 @@ static int connectionBusyHandler(void *ptr, int count)
 	
 	if ([metadataChanges count] > 0)
 		metadataChanges = nil;
+	
+	if ([insertedKeys count] > 0)
+		insertedKeys = nil;
 	
 	if ([removedKeys count] > 0)
 		removedKeys = nil;
@@ -3074,6 +3396,8 @@ static int connectionBusyHandler(void *ptr, int count)
 	// It is important for read-only transactions on other connections to know there's a writer.
 	
 	dispatch_sync(database->snapshotQueue, ^{ @autoreleasepool {
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		YapDatabaseConnectionState *myState = nil;
 		
@@ -3113,6 +3437,8 @@ static int connectionBusyHandler(void *ptr, int count)
 		needsMarkSqlLevelSharedReadLock = YES;
 		
 		YDBLogVerbose(@"YapDatabaseConnection(%p) starting vacuum operation.", self);
+		
+	#pragma clang diagnostic pop
 	}});
 	
 	// Pre-Pseudo-Write-Transaction: Step 5 of 5
@@ -3172,6 +3498,8 @@ static int connectionBusyHandler(void *ptr, int count)
 	__block uint64_t minSnapshot = UINT64_MAX;
 	
 	dispatch_sync(database->snapshotQueue, ^{ @autoreleasepool {
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		// Post-Pseudo-Write-Transaction: Step 2 of 5
 		//
@@ -3208,6 +3536,8 @@ static int connectionBusyHandler(void *ptr, int count)
 		myState->waitingForWriteLock = NO;
 		
 		YDBLogVerbose(@"YapDatabaseConnection(%p) completing read-write transaction.", self);
+		
+	#pragma clang diagnostic pop
 	}});
 	
 	if (changeset)
@@ -3326,6 +3656,8 @@ static int connectionBusyHandler(void *ptr, int count)
 	__block YapDatabaseConnectionState *writeStateToSignal = nil;
 	
 	dispatch_block_t block = ^{ @autoreleasepool {
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		// Update our connection state within the state table.
 		//
@@ -3367,6 +3699,8 @@ static int connectionBusyHandler(void *ptr, int count)
 		{
 			writeStateToSignal = blockedWriteState;
 		}
+		
+	#pragma clang diagnostic pop
 	}};
 	
 	if (dispatch_get_specific(database->IsOnSnapshotQueueKey))
@@ -3393,6 +3727,8 @@ static int connectionBusyHandler(void *ptr, int count)
 	__block NSMutableArray *notifications = nil;
 	
 	dispatch_block_t block = ^{ @autoreleasepool {
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		if (longLivedReadTransaction)
 		{
@@ -3421,6 +3757,8 @@ static int connectionBusyHandler(void *ptr, int count)
 		}
 		
 		[processedChangesets removeAllObjects];
+		
+	#pragma clang diagnostic pop
 	}};
 	
 	if (dispatch_get_specific(IsOnConnectionQueueKey))
@@ -3436,6 +3774,8 @@ static int connectionBusyHandler(void *ptr, int count)
 	__block NSMutableArray *notifications = nil;
 	
 	dispatch_block_t block = ^{ @autoreleasepool {
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		if (longLivedReadTransaction)
 		{
@@ -3461,6 +3801,8 @@ static int connectionBusyHandler(void *ptr, int count)
 			
 			[pendingChangesets removeAllObjects];
 		}
+		
+	#pragma clang diagnostic pop
 	}};
 	
 	if (dispatch_get_specific(IsOnConnectionQueueKey))
@@ -3476,8 +3818,12 @@ static int connectionBusyHandler(void *ptr, int count)
 	__block BOOL result = NO;
 	
 	dispatch_block_t block = ^{
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		result = (longLivedReadTransaction != nil);
+		
+	#pragma clang diagnostic pop
 	};
 	
 	if (dispatch_get_specific(IsOnConnectionQueueKey))
@@ -3491,8 +3837,12 @@ static int connectionBusyHandler(void *ptr, int count)
 - (void)enableExceptionsForImplicitlyEndingLongLivedReadTransaction
 {
 	dispatch_block_t block = ^{
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		throwExceptionsForImplicitlyEndingLongLivedReadTransaction = YES;
+		
+	#pragma clang diagnostic pop
 	};
 	
 	if (dispatch_get_specific(IsOnConnectionQueueKey))
@@ -3504,8 +3854,12 @@ static int connectionBusyHandler(void *ptr, int count)
 - (void)disableExceptionsForImplicitlyEndingLongLivedReadTransaction
 {
 	dispatch_block_t block = ^{
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		throwExceptionsForImplicitlyEndingLongLivedReadTransaction = NO;
+		
+	#pragma clang diagnostic pop
 	};
 	
 	if (dispatch_get_specific(IsOnConnectionQueueKey))
@@ -3526,91 +3880,24 @@ static int connectionBusyHandler(void *ptr, int count)
  * then we want to reset the connection such that it's reading commit X directly from the database file.
  * This will mean the WAL is no longer locked, and can be reset on the next write.
  * 
- * We use the maybeResetLongLivedReadTransaction method to achieve this.
+ * We use this method as part of the solution to achieving this.
 **/
-- (void)maybeResetLongLivedReadTransaction
+- (BOOL)resetLongLivedReadTransaction
 {
-	// Async dispatch onto the writeQueue so we know there aren't any other active readWrite transactions
+	if (longLivedReadTransaction && (snapshot == [database snapshot]))
+	{
+		NSArray *empty = [self beginLongLivedReadTransaction];
 	
-	dispatch_async(database->writeQueue, ^{
-		
-		// Pause the writeQueue so readWrite operations can't interfere with us.
-		// We abort if our connection has a readWrite transaction pending.
-		
-		BOOL abort = NO;
-		
-		OSSpinLockLock(&lock);
+		if ([empty count] != 0)
 		{
-			if (activeReadWriteTransaction) {
-				abort = YES;
-			}
-			else if (!writeQueueSuspended) {
-				dispatch_suspend(database->writeQueue);
-				writeQueueSuspended = YES;
-			}
+			YDBLogError(@"Core logic failure! "
+							@"Silent longLivedReadTransaction reset resulted in non-empty notification array!");
 		}
-		OSSpinLockUnlock(&lock);
 		
-		if (abort) return;
-		
-		// Async dispatch onto our connectionQueue.
-		
-		dispatch_async(connectionQueue, ^{
-			
-			// If possible, silently reset the longLivedReadTransaction (same snapshot, no longer locking the WAL)
-			
-			BOOL writeQueueStillSuspended = NO;
-			OSSpinLockLock(&lock);
-			{
-				writeQueueStillSuspended = writeQueueSuspended;
-			}
-			OSSpinLockUnlock(&lock);
-			
-			if (writeQueueStillSuspended && longLivedReadTransaction && (snapshot == [database snapshot]))
-			{
-				NSArray *empty = [self beginLongLivedReadTransaction];
-				
-				if ([empty count] != 0)
-				{
-					YDBLogError(@"Core logic failure! "
-					            @"Silent longLivedReadTransaction reset resulted in non-empty notification array!");
-				}
-			}
-			
-			// Resume the writeQueue
-			
-			OSSpinLockLock(&lock);
-			{
-				if (writeQueueSuspended) {
-					dispatch_resume(database->writeQueue);
-					writeQueueSuspended = NO;
-				}
-			}
-			OSSpinLockUnlock(&lock);
-		});
-	});
-}
-
-NS_INLINE void __preWriteQueue(YapDatabaseConnection *connection)
-{
-	OSSpinLockLock(&connection->lock);
-	{
-		if (connection->writeQueueSuspended) {
-			dispatch_resume(connection->database->writeQueue);
-			connection->writeQueueSuspended = NO;
-		}
-		connection->activeReadWriteTransaction = YES;
+		return YES;
 	}
-	OSSpinLockUnlock(&connection->lock);
-}
-
-NS_INLINE void __postWriteQueue(YapDatabaseConnection *connection)
-{
-	OSSpinLockLock(&connection->lock);
-	{
-		connection->activeReadWriteTransaction = NO;
-	}
-	OSSpinLockUnlock(&connection->lock);
+	
+	return NO;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -3682,6 +3969,8 @@ NS_INLINE void __postWriteQueue(YapDatabaseConnection *connection)
 	__block NSMutableDictionary *externalChangeset_extensions = nil;
 	
 	[extensions enumerateKeysAndObjectsUsingBlock:^(id extName, id extConnectionObj, BOOL __unused *stop) {
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		__unsafe_unretained YapDatabaseExtensionConnection *extConnection = extConnectionObj;
 		
@@ -3713,6 +4002,8 @@ NS_INLINE void __postWriteQueue(YapDatabaseConnection *connection)
 		{
 			hasDiskChanges = YES;
 		}
+		
+	#pragma clang diagnostic pop
 	}];
 	
 	NSMutableDictionary *internalChangeset = nil;
@@ -3754,9 +4045,10 @@ NS_INLINE void __postWriteQueue(YapDatabaseConnection *connection)
 	// Copy this change information into the changeset for processing by other connections.
 	
 	if ([objectChanges count]      > 0 ||
-		[metadataChanges count]    > 0 ||
-		[removedKeys count]        > 0 ||
-		[removedCollections count] > 0 ||
+	    [metadataChanges count]    > 0 ||
+	    [insertedKeys count]       > 0 ||
+	    [removedKeys count]        > 0 ||
+	    [removedCollections count] > 0 ||
 	    [removedRowids count]      > 0 || allKeysRemoved)
 	{
 		if (internalChangeset == nil)
@@ -3779,6 +4071,14 @@ NS_INLINE void __postWriteQueue(YapDatabaseConnection *connection)
 			
 			YapSet *immutableMetadataChanges = [[YapSet alloc] initWithDictionary:metadataChanges];
 			externalChangeset[YapDatabaseMetadataChangesKey] = immutableMetadataChanges;
+		}
+		
+		if ([insertedKeys count] > 0)
+		{
+			internalChangeset[YapDatabaseInsertedKeysKey] = insertedKeys;
+			
+			YapSet *immutableInsertedKeys = [[YapSet alloc] initWithSet:insertedKeys];
+			externalChangeset[YapDatabaseInsertedKeysKey] = immutableInsertedKeys;
 		}
 		
 		if ([removedKeys count] > 0)
@@ -3947,7 +4247,9 @@ NS_INLINE void __postWriteQueue(YapDatabaseConnection *connection)
 		BOOL isPolicyShare       = (objectPolicy == YapDatabasePolicyShare);
 		
 		[changeset_objectChanges enumerateKeysAndObjectsUsingBlock:^(id key, id newObject, BOOL __unused *stop) {
-			
+		#pragma clang diagnostic push
+		#pragma clang diagnostic ignored "-Wimplicit-retain-self"
+		
 			__unsafe_unretained YapCollectionKey *cacheKey = (YapCollectionKey *)key;
 			
 			if ([objectCache containsKey:cacheKey])
@@ -3973,6 +4275,8 @@ NS_INLINE void __postWriteQueue(YapDatabaseConnection *connection)
 					}
 				}
 			}
+			
+		#pragma clang diagnostic pop
 		}];
 	}
 	else if (hasObjectChanges || hasRemovedKeys || hasRemovedCollections)
@@ -4059,6 +4363,8 @@ NS_INLINE void __postWriteQueue(YapDatabaseConnection *connection)
 		BOOL isPolicyShare       = (metadataPolicy == YapDatabasePolicyShare);
 		
 		[changeset_metadataChanges enumerateKeysAndObjectsUsingBlock:^(id key, id newMetadata, BOOL __unused *stop) {
+		#pragma clang diagnostic push
+		#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 			
 			__unsafe_unretained YapCollectionKey *cacheKey = (YapCollectionKey *)key;
 			
@@ -4085,6 +4391,8 @@ NS_INLINE void __postWriteQueue(YapDatabaseConnection *connection)
 					}
 				}
 			}
+			
+		#pragma clang diagnostic pop
 		}];
 	}
 	else if (hasMetadataChanges || hasRemovedKeys || hasRemovedCollections)
@@ -4807,6 +5115,8 @@ NS_INLINE void __postWriteQueue(YapDatabaseConnection *connection)
 	__block id extConnection = nil;
 	
 	dispatch_block_t block = ^{
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		extConnection = [extensions objectForKey:extName];
 		
@@ -4822,6 +5132,8 @@ NS_INLINE void __postWriteQueue(YapDatabaseConnection *connection)
 				[extensions setObject:extConnection forKey:extName];
 			}
 		}
+		
+	#pragma clang diagnostic pop
 	};
 	
 	if (dispatch_get_specific(IsOnConnectionQueueKey))
@@ -4849,6 +5161,8 @@ NS_INLINE void __postWriteQueue(YapDatabaseConnection *connection)
 	if (!extensionsReady)
 	{
 		[registeredExtensions enumerateKeysAndObjectsUsingBlock:^(id key, id obj, BOOL __unused *stop) {
+		#pragma clang diagnostic push
+		#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 			
 			__unsafe_unretained NSString *extName = key;
 			__unsafe_unretained YapDatabaseExtension *ext = obj;
@@ -4858,6 +5172,8 @@ NS_INLINE void __postWriteQueue(YapDatabaseConnection *connection)
 				id extConnection = [ext newConnection:self];
 				[extensions setObject:extConnection forKey:extName];
 			}
+			
+		#pragma clang diagnostic pop
 		}];
 		
 		extensionsReady = YES;
@@ -4873,7 +5189,9 @@ NS_INLINE void __postWriteQueue(YapDatabaseConnection *connection)
 	__block BOOL result = NO;
 	
 	dispatch_sync(connectionQueue, ^{ @autoreleasepool {
-	
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
+		
 		YapDatabaseReadWriteTransaction *transaction = [self newReadWriteTransaction];
 		[self preReadWriteTransaction:transaction];
 		
@@ -4910,6 +5228,8 @@ NS_INLINE void __postWriteQueue(YapDatabaseConnection *connection)
 		
 		[self postReadWriteTransaction:transaction];
 		registeredExtensionsChanged = NO;
+		
+	#pragma clang diagnostic pop
 	}});
 	
 	return result;
@@ -4920,6 +5240,8 @@ NS_INLINE void __postWriteQueue(YapDatabaseConnection *connection)
 	NSAssert(dispatch_get_specific(database->IsOnWriteQueueKey), @"Must go through writeQueue.");
 	
 	dispatch_sync(connectionQueue, ^{ @autoreleasepool {
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		YapDatabaseReadWriteTransaction *transaction = [self newReadWriteTransaction];
 		[self preReadWriteTransaction:transaction];
@@ -4983,6 +5305,8 @@ NS_INLINE void __postWriteQueue(YapDatabaseConnection *connection)
 		// And reset the registeredExtensionsChanged ivar.
 		// The above method already processed it, and included the appropriate information in the changeset.
 		registeredExtensionsChanged = NO;
+		
+	#pragma clang diagnostic pop
 	}});
 }
 
@@ -5264,8 +5588,12 @@ NS_INLINE void __postWriteQueue(YapDatabaseConnection *connection)
 	__block int64_t value = -1;
 	
 	dispatch_block_t block = ^{ @autoreleasepool {
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		value = [YapDatabase pragma:@"synchronous" using:db];
+		
+	#pragma clang diagnostic pop
 	}};
 	
 	if (dispatch_get_specific(IsOnConnectionQueueKey))
@@ -5285,8 +5613,12 @@ NS_INLINE void __postWriteQueue(YapDatabaseConnection *connection)
 	__block int64_t value = -1;
 	
 	dispatch_block_t block = ^{ @autoreleasepool {
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		value = [YapDatabase pragma:@"page_size" using:db];
+		
+	#pragma clang diagnostic pop
 	}};
 	
 	if (dispatch_get_specific(IsOnConnectionQueueKey))
@@ -5309,8 +5641,12 @@ NS_INLINE void __postWriteQueue(YapDatabaseConnection *connection)
 	__block int64_t value = -1;
 	
 	dispatch_block_t block = ^{ @autoreleasepool {
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		value = [YapDatabase pragma:@"mmap_size" using:db];
+		
+	#pragma clang diagnostic pop
 	}};
 	
 	if (dispatch_get_specific(IsOnConnectionQueueKey))
@@ -5360,8 +5696,12 @@ NS_INLINE void __postWriteQueue(YapDatabaseConnection *connection)
 	__block int64_t value = -1;
 	
 	dispatch_block_t block = ^{ @autoreleasepool {
-	
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
+		
 		value = [YapDatabase pragma:@"auto_vacuum" using:db];
+		
+	#pragma clang diagnostic pop
 	}};
 	
 	if (dispatch_get_specific(IsOnConnectionQueueKey))
@@ -5393,6 +5733,15 @@ NS_INLINE void __postWriteQueue(YapDatabaseConnection *connection)
 {
 	dispatch_sync(connectionQueue, ^{ @autoreleasepool {
 		
+	// IMPORTANT:
+	// We are purposefully retaining self here.
+	// Here are the rules:
+	// - a YapDatabaseConnection instance cannot be deallocated if there are existing/pending transactions
+	// - a YapDatabase instance cannot be deallocated if there are existing connections
+	//
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
+		
 		if (longLivedReadTransaction)
 		{
 			if (throwExceptionsForImplicitlyEndingLongLivedReadTransaction)
@@ -5408,7 +5757,6 @@ NS_INLINE void __postWriteQueue(YapDatabaseConnection *connection)
 			}
 		}
 		
-		__preWriteQueue(self);
 		dispatch_sync(database->writeQueue, ^{ @autoreleasepool {
 			
 			[self prePseudoReadWriteTransaction];
@@ -5435,8 +5783,9 @@ NS_INLINE void __postWriteQueue(YapDatabaseConnection *connection)
 			[self postPseudoReadWriteTransaction];
 			
 		}}); // End dispatch_sync(database->writeQueue)
-		__postWriteQueue(self);
-	}});     // End dispatch_sync(connectionQueue)
+		
+	#pragma clang diagnostic pop
+	}}); // End dispatch_sync(connectionQueue)
 }
 
 /**
@@ -5484,6 +5833,15 @@ NS_INLINE void __postWriteQueue(YapDatabaseConnection *connection)
 		completionQueue = dispatch_get_main_queue();
 	
 	dispatch_async(connectionQueue, ^{ @autoreleasepool {
+	
+	// IMPORTANT:
+	// We are purposefully retaining self here.
+	// Here are the rules:
+	// - a YapDatabaseConnection instance cannot be deallocated if there are existing/pending transactions
+	// - a YapDatabase instance cannot be deallocated if there are existing connections
+	//
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		if (longLivedReadTransaction)
 		{
@@ -5500,7 +5858,6 @@ NS_INLINE void __postWriteQueue(YapDatabaseConnection *connection)
 			}
 		}
 		
-		__preWriteQueue(self);
 		dispatch_sync(database->writeQueue, ^{ @autoreleasepool {
 			
 			[self prePseudoReadWriteTransaction];
@@ -5531,8 +5888,9 @@ NS_INLINE void __postWriteQueue(YapDatabaseConnection *connection)
 			}
 			
 		}}); // End dispatch_sync(database->writeQueue)
-		__postWriteQueue(self);
-	}});     // End dispatch_async(connectionQueue)
+	
+	#pragma clang diagnostic pop
+	}}); // End dispatch_async(connectionQueue)
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -5559,6 +5917,15 @@ NS_INLINE void __postWriteQueue(YapDatabaseConnection *connection)
 	__block NSError *error = nil;
 	
 	dispatch_sync(connectionQueue, ^{ @autoreleasepool {
+	
+	// IMPORTANT:
+	// We are purposefully retaining self here.
+	// Here are the rules:
+	// - a YapDatabaseConnection instance cannot be deallocated if there are existing/pending transactions
+	// - a YapDatabase instance cannot be deallocated if there are existing connections
+	//
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 		
 		if (longLivedReadTransaction)
 		{
@@ -5575,7 +5942,6 @@ NS_INLINE void __postWriteQueue(YapDatabaseConnection *connection)
 			}
 		}
 		
-		__preWriteQueue(self);
 		dispatch_sync(database->writeQueue, ^{ @autoreleasepool {
 			
 			[self prePseudoReadWriteTransaction];
@@ -5586,8 +5952,9 @@ NS_INLINE void __postWriteQueue(YapDatabaseConnection *connection)
 			[self postPseudoReadWriteTransaction];
 			
 		}}); // End dispatch_sync(database->writeQueue)
-		__postWriteQueue(self);
-	}});     // End dispatch_sync(connectionQueue)
+		
+	#pragma clang diagnostic pop
+	}}); // End dispatch_sync(connectionQueue)
 	
 	return error;
 }
@@ -5654,6 +6021,15 @@ NS_INLINE void __postWriteQueue(YapDatabaseConnection *connection)
 	
 	dispatch_async(connectionQueue, ^{ @autoreleasepool {
 		
+	// IMPORTANT:
+	// We are purposefully retaining self here.
+	// Here are the rules:
+	// - a YapDatabaseConnection instance cannot be deallocated if there are existing/pending transactions
+	// - a YapDatabase instance cannot be deallocated if there are existing connections
+	//
+	#pragma clang diagnostic push
+	#pragma clang diagnostic ignored "-Wimplicit-retain-self"
+		
 		if (longLivedReadTransaction)
 		{
 			if (throwExceptionsForImplicitlyEndingLongLivedReadTransaction)
@@ -5669,7 +6045,6 @@ NS_INLINE void __postWriteQueue(YapDatabaseConnection *connection)
 			}
 		}
 		
-		__preWriteQueue(self);
 		dispatch_sync(database->writeQueue, ^{ @autoreleasepool {
 			
 			[self prePseudoReadWriteTransaction];
@@ -5687,8 +6062,9 @@ NS_INLINE void __postWriteQueue(YapDatabaseConnection *connection)
 			}
 			
 		}}); // End dispatch_sync(database->writeQueue)
-		__postWriteQueue(self);
-	}});     // End dispatch_async(connectionQueue)
+		
+	#pragma clang diagnostic pop
+	}}); // End dispatch_async(connectionQueue)
 	
 	return progress;
 }

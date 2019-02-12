@@ -1,19 +1,18 @@
 #import "YapDatabaseActionManager.h"
 
+#import "YapDatabaseAtomic.h"
 #import "YapActionItemPrivate.h"
 #import "YapDatabaseActionManagerPrivate.h"
 #import "YapDatabaseLogging.h"
 
 #import "NSDate+YapDatabase.h"
 
-#import <libkern/OSAtomic.h>
-
 /**
  * Define log level for this file: OFF, ERROR, WARN, INFO, VERBOSE
  * See YapDatabaseLogging.h for more information.
 **/
 #if DEBUG
-  static const int ydbLogLevel = YDB_LOG_LEVEL_VERBOSE | YDB_LOG_FLAG_TRACE;
+  static const int ydbLogLevel = YDB_LOG_LEVEL_WARN;
 #else
   static const int ydbLogLevel = YDB_LOG_LEVEL_WARN;
 #endif
@@ -40,7 +39,7 @@
 	BOOL timerSuspended;
 	
 	NSUInteger suspendCount;
-	OSSpinLock suspendCountLock;
+	YAPUnfairLock suspendCountLock;
 }
 
 @synthesize weakDbConnection = weakDbConnection;
@@ -81,15 +80,22 @@
 
 - (instancetype)init
 {
-	return [self initWithConnection:nil options:nil];
+	return [self initWithConnection:nil options:nil scheduler:nil];
 }
 
 - (instancetype)initWithConnection:(YapDatabaseConnection *)inConnection
 {
-	return [self initWithConnection:inConnection options:nil];
+	return [self initWithConnection:inConnection options:nil scheduler:nil];
 }
 
 - (instancetype)initWithConnection:(YapDatabaseConnection *)inConnection options:(YapDatabaseViewOptions *)inOptions
+{
+	return [self initWithConnection:inConnection options:inOptions scheduler:nil];
+}
+
+- (instancetype)initWithConnection:(nullable YapDatabaseConnection *)inConnection
+                           options:(nullable YapDatabaseViewOptions *)inOptions
+                         scheduler:(nullable YapActionScheduler)inScheduler
 {
 	// Create and configure view
 	
@@ -116,22 +122,26 @@
 		self.weakDbConnection = inConnection;
 		useWeakDbConnection = (inConnection != nil);
 		
+		scheduler = inScheduler;
+		
 		actionItemsDict = [[NSMutableDictionary alloc] init];
 		
 		suspendCount = 0;
-		suspendCountLock = OS_SPINLOCK_INIT;
+		suspendCountLock = YAP_UNFAIR_LOCK_INIT;
 	}
 	return self;
 }
 
 - (void)dealloc
 {
-    // libdispatch isn't happy about releasing suspended dispatch sources.
-    // See _dispatch_source_xref_release at https://opensource.apple.com/source/libdispatch/libdispatch-187.7/src/source.c
-    if(timer && timerSuspended) {
-        dispatch_resume(timer);
-        timerSuspended = NO;
-    }
+	// libdispatch isn't happy about releasing suspended dispatch sources.
+	// See _dispatch_source_xref_release at:
+	// https://opensource.apple.com/source/libdispatch/libdispatch-187.7/src/source.c
+	//
+	if (timer && timerSuspended) {
+		dispatch_resume(timer);
+		timerSuspended = NO;
+	}
     
 	[[NSNotificationCenter defaultCenter] removeObserver:self];
 }
@@ -165,16 +175,33 @@
 	
 	__block BOOL supported = YES;
 	
-	[registeredExtensions enumerateKeysAndObjectsUsingBlock:^(id __unused key, id obj, BOOL *stop) {
+	if (scheduler)
+	{
+		// This ActionManager instance is configured with an explicit scheduler.
+		// Since the scheduler handles all the logic, there can be multiple such ActionManager instances.
+	}
+	else
+	{
+		// The ActionManager instance is configured to react to objects that
+		// implement the YapActionItem protocol. So there can only be one such
+		// configured ActionManager instance at a time. Otherwise EVERY registered
+		// ActionManager would react to the YapActionItem.
 		
-		if ([obj isKindOfClass:[YapDatabaseActionManager class]])
-		{
-			YDBLogWarn(@"Only 1 YapDatabaseActionManager instance is supported at a time");
-			
-			supported = NO;
-			*stop = YES;
-		}
-	}];
+		[registeredExtensions enumerateKeysAndObjectsUsingBlock:^(id __unused key, id obj, BOOL *stop) {
+	
+			if ([obj isKindOfClass:[YapDatabaseActionManager class]])
+			{
+				YapDatabaseActionManager *ext = (YapDatabaseActionManager *)obj;
+				if (ext->scheduler == nil)
+				{
+					YDBLogWarn(@"Only 1 YapDatabaseActionManager instance (sans scheduler) is supported at a time");
+					
+					supported = NO;
+					*stop = YES;
+				}
+			}
+		}];
+	}
 	
 	if (!supported) return NO;
 	
@@ -288,7 +315,7 @@
 
 - (YapDatabaseExtensionConnection *)newConnection:(YapDatabaseConnection *)connection
 {
-	return [[YapDatabaseActionManagerConnection alloc] initWithView:self databaseConnection:connection];
+	return [[YapDatabaseActionManagerConnection alloc] initWithParent:self databaseConnection:connection];
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -304,11 +331,11 @@
 {
 	NSUInteger currentSuspendCount = 0;
 	
-	OSSpinLockLock(&suspendCountLock);
+	YAPUnfairLockLock(&suspendCountLock);
 	{
 		currentSuspendCount = suspendCount;
 	}
-	OSSpinLockUnlock(&suspendCountLock);
+	YAPUnfairLockUnlock(&suspendCountLock);
 	
 	return currentSuspendCount;
 }
@@ -324,7 +351,7 @@
 	NSUInteger oldSuspendCount = 0;
 	NSUInteger newSuspendCount = 0;
 	
-	OSSpinLockLock(&suspendCountLock);
+	YAPUnfairLockLock(&suspendCountLock);
 	{
 		oldSuspendCount = suspendCount;
 		
@@ -337,7 +364,7 @@
 		
 		newSuspendCount = suspendCount;
 	}
-	OSSpinLockUnlock(&suspendCountLock);
+	YAPUnfairLockUnlock(&suspendCountLock);
 	
 	if (overflow) {
 		YDBLogWarn(@"%@ - The suspendCount has reached NSUIntegerMax!", THIS_METHOD);
@@ -357,7 +384,7 @@
 	NSUInteger oldSuspendCount = 0;
 	NSUInteger newSuspendCount = 0;
 	
-	OSSpinLockLock(&suspendCountLock);
+	YAPUnfairLockLock(&suspendCountLock);
 	{
 		oldSuspendCount = suspendCount;
 		
@@ -368,7 +395,7 @@
 		
 		newSuspendCount = suspendCount;
 	}
-	OSSpinLockUnlock(&suspendCountLock);
+	YAPUnfairLockUnlock(&suspendCountLock);
 	
 	if (underflow) {
 		YDBLogWarn(@"%@ - Attempting to resume with suspendCount already at zero.", THIS_METHOD);
@@ -550,6 +577,8 @@
 			}
 			
 		} usingBlock:^(NSString *collection, NSString *key, id object, NSUInteger index, BOOL *stop) {
+		#pragma clang diagnostic push // silence warnings: synchronous access
+		#pragma clang diagnostic ignored "-Wimplicit-retain-self"
 			
 			//
 			// Processing Block
@@ -584,6 +613,8 @@
 					}
 				}
 			}
+			
+		#pragma clang diagnostic pop
 		}];
 		
 	}
@@ -719,9 +750,9 @@
 	__block NSMutableArray *collectionKeysToRemove = nil;
 	__block NSDate *nextTimerFireDate = nil;
 	
-	[actionItemsDict enumerateKeysAndObjectsUsingBlock:^(YapCollectionKey *ck, NSArray *actionItems, BOOL *stop) {
+	[actionItemsDict enumerateKeysAndObjectsUsingBlock:^(YapCollectionKey *ck, NSArray *actionItems, BOOL *dictStop) {
 		
-		[actionItems enumerateObjectsUsingBlock:^(YapActionItem *actionItem, NSUInteger idx, BOOL *stop) {
+		[actionItems enumerateObjectsUsingBlock:^(YapActionItem *actionItem, NSUInteger idx, BOOL *itemsStop) {
 			
 			BOOL needsRun = NO;
 			NSDate *actionDate = nil;
@@ -873,10 +904,10 @@
 		if (startOffset < 0.0)
 			startOffset = 0.0;
 		
-		dispatch_time_t start = dispatch_time(DISPATCH_TIME_NOW, (startOffset * NSEC_PER_SEC));
+		dispatch_time_t start = dispatch_time(DISPATCH_TIME_NOW, (uint64_t)(startOffset * NSEC_PER_SEC));
 		
 		uint64_t interval = DISPATCH_TIME_FOREVER;
-		uint64_t leeway = (0.1 * NSEC_PER_SEC);
+		uint64_t leeway = (uint64_t)(0.1 * NSEC_PER_SEC);
 		
 		dispatch_source_set_timer(timer, start, interval, leeway);
 		

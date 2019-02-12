@@ -6,7 +6,6 @@
 #import "MyTodo.h"
 
 #import <CocoaLumberjack/CocoaLumberjack.h>
-#import <Reachability/Reachability.h>
 
 // Log Levels: off, error, warn, info, verbose
 // Log Flags : trace
@@ -253,10 +252,10 @@ DatabaseManager *MyDatabaseManager;
 		return NSOrderedSame;
 	}];
 	
-	YapDatabaseView *orderView =
-	  [[YapDatabaseView alloc] initWithGrouping:orderGrouping
-	                                    sorting:orderSorting
-	                                 versionTag:@"sortedByCreationDate"];
+	YapDatabaseAutoView *orderView =
+	  [[YapDatabaseAutoView alloc] initWithGrouping:orderGrouping
+	                                        sorting:orderSorting
+	                                     versionTag:@"sortedByCreationDate"];
 	
 	[database asyncRegisterExtension:orderView withName:Ext_View_Order completionBlock:^(BOOL ready) {
 		if (!ready) {
@@ -291,7 +290,7 @@ DatabaseManager *MyDatabaseManager;
 		if (record == nil)
 		{
 			CKRecordZoneID *zoneID =
-			  [[CKRecordZoneID alloc] initWithZoneName:CloudKitZoneName ownerName:CKOwnerDefaultName];
+			  [[CKRecordZoneID alloc] initWithZoneName:CloudKitZoneName ownerName:CKCurrentUserDefaultName];
 			
 			CKRecordID *recordID = [[CKRecordID alloc] initWithRecordName:todo.uuid zoneID:zoneID];
 			

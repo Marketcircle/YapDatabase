@@ -247,8 +247,6 @@
 				DC842FF11D414231002F2ED8 /* Frameworks */,
 				DC842FF21D414231002F2ED8 /* Resources */,
 				DC8430361D414231002F2ED8 /* Embed Watch Content */,
-				EAD01AC8E836A0F17344BA11 /* [CP] Embed Pods Frameworks */,
-				F7E86F8E4525E024DCFFA3AC /* [CP] Copy Pods Resources */,
 			);
 			buildRules = (
 			);
@@ -268,7 +266,6 @@
 				DC8430091D414231002F2ED8 /* Resources */,
 				DC8430321D414231002F2ED8 /* Embed App Extensions */,
 				C7DD4B59F67483CA5E4CF5DA /* Frameworks */,
-				EDF13F39D0AD6027099411CD /* [CP] Copy Pods Resources */,
 			);
 			buildRules = (
 			);
@@ -288,8 +285,6 @@
 				DC8430161D414231002F2ED8 /* Sources */,
 				DC8430171D414231002F2ED8 /* Frameworks */,
 				DC8430181D414231002F2ED8 /* Resources */,
-				25482F23F921701228560A9D /* [CP] Embed Pods Frameworks */,
-				988AB24193336083E8735B6C /* [CP] Copy Pods Resources */,
 			);
 			buildRules = (
 			);
@@ -306,17 +301,20 @@
 		DC842FEC1D414231002F2ED8 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
-				LastUpgradeCheck = 0730;
+				LastUpgradeCheck = 0820;
 				ORGANIZATIONNAME = "Deusty LLC";
 				TargetAttributes = {
 					DC842FF31D414231002F2ED8 = {
 						CreatedOnToolsVersion = 7.3.1;
+						DevelopmentTeam = T7839KRU5H;
 					};
 					DC84300A1D414231002F2ED8 = {
 						CreatedOnToolsVersion = 7.3.1;
+						DevelopmentTeam = T7839KRU5H;
 					};
 					DC8430191D414231002F2ED8 = {
 						CreatedOnToolsVersion = 7.3.1;
+						DevelopmentTeam = T7839KRU5H;
 					};
 				};
 			};
@@ -371,49 +369,22 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		25482F23F921701228560A9D /* [CP] Embed Pods Frameworks */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputPaths = (
-			);
-			name = "[CP] Embed Pods Frameworks";
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "\"${SRCROOT}/Pods/Target Support Files/Pods-watchOS-YapDatabaseTesting WatchKit Extension/Pods-watchOS-YapDatabaseTesting WatchKit Extension-frameworks.sh\"\n";
-			showEnvVarsInLog = 0;
-		};
 		3FA73C8C042E613D9612306F /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			inputPaths = (
+				"${PODS_PODFILE_DIR_PATH}/Podfile.lock",
+				"${PODS_ROOT}/Manifest.lock",
 			);
 			name = "[CP] Check Pods Manifest.lock";
 			outputPaths = (
+				"$(DERIVED_FILE_DIR)/Pods-YapDatabaseTesting-checkManifestLockResult.txt",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "diff \"${PODS_ROOT}/../Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n";
-			showEnvVarsInLog = 0;
-		};
-		988AB24193336083E8735B6C /* [CP] Copy Pods Resources */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputPaths = (
-			);
-			name = "[CP] Copy Pods Resources";
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "\"${SRCROOT}/Pods/Target Support Files/Pods-watchOS-YapDatabaseTesting WatchKit Extension/Pods-watchOS-YapDatabaseTesting WatchKit Extension-resources.sh\"\n";
+			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
 			showEnvVarsInLog = 0;
 		};
 		B39BE2C1AD505B87AFC41C58 /* [CP] Check Pods Manifest.lock */ = {
@@ -422,13 +393,16 @@
 			files = (
 			);
 			inputPaths = (
+				"${PODS_PODFILE_DIR_PATH}/Podfile.lock",
+				"${PODS_ROOT}/Manifest.lock",
 			);
 			name = "[CP] Check Pods Manifest.lock";
 			outputPaths = (
+				"$(DERIVED_FILE_DIR)/Pods-watchOS-YapDatabaseTesting WatchKit App-checkManifestLockResult.txt",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "diff \"${PODS_ROOT}/../Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n";
+			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
 			showEnvVarsInLog = 0;
 		};
 		E0B253BEE193695972CE0AED /* [CP] Check Pods Manifest.lock */ = {
@@ -437,58 +411,16 @@
 			files = (
 			);
 			inputPaths = (
+				"${PODS_PODFILE_DIR_PATH}/Podfile.lock",
+				"${PODS_ROOT}/Manifest.lock",
 			);
 			name = "[CP] Check Pods Manifest.lock";
 			outputPaths = (
+				"$(DERIVED_FILE_DIR)/Pods-watchOS-YapDatabaseTesting WatchKit Extension-checkManifestLockResult.txt",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "diff \"${PODS_ROOT}/../Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n";
-			showEnvVarsInLog = 0;
-		};
-		EAD01AC8E836A0F17344BA11 /* [CP] Embed Pods Frameworks */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputPaths = (
-			);
-			name = "[CP] Embed Pods Frameworks";
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "\"${SRCROOT}/Pods/Target Support Files/Pods-YapDatabaseTesting/Pods-YapDatabaseTesting-frameworks.sh\"\n";
-			showEnvVarsInLog = 0;
-		};
-		EDF13F39D0AD6027099411CD /* [CP] Copy Pods Resources */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputPaths = (
-			);
-			name = "[CP] Copy Pods Resources";
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "\"${SRCROOT}/Pods/Target Support Files/Pods-watchOS-YapDatabaseTesting WatchKit App/Pods-watchOS-YapDatabaseTesting WatchKit App-resources.sh\"\n";
-			showEnvVarsInLog = 0;
-		};
-		F7E86F8E4525E024DCFFA3AC /* [CP] Copy Pods Resources */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputPaths = (
-			);
-			name = "[CP] Copy Pods Resources";
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "\"${SRCROOT}/Pods/Target Support Files/Pods-YapDatabaseTesting/Pods-YapDatabaseTesting-resources.sh\"\n";
+			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
 			showEnvVarsInLog = 0;
 		};
 /* End PBXShellScriptBuildPhase section */
@@ -571,8 +503,10 @@
 				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
 				CLANG_WARN_EMPTY_BODY = YES;
 				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
 				CLANG_WARN_INT_CONVERSION = YES;
 				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
@@ -616,8 +550,10 @@
 				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
 				CLANG_WARN_EMPTY_BODY = YES;
 				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
 				CLANG_WARN_INT_CONVERSION = YES;
 				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
@@ -645,6 +581,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = DA75717E8E7B5E8EFB84553A /* Pods-watchOS-YapDatabaseTesting WatchKit Extension.debug.xcconfig */;
 			buildSettings = {
+				DEVELOPMENT_TEAM = T7839KRU5H;
 				INFOPLIST_FILE = "YapDatabaseTesting WatchKit Extension/Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = com.deusty.YapDatabaseTesting.watchkitapp.watchkitextension;
@@ -652,7 +589,7 @@
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
 				TARGETED_DEVICE_FAMILY = 4;
-				WATCHOS_DEPLOYMENT_TARGET = 2.2;
+				WATCHOS_DEPLOYMENT_TARGET = 3.0;
 			};
 			name = Debug;
 		};
@@ -660,6 +597,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = E6781E04B2562308CA273BBF /* Pods-watchOS-YapDatabaseTesting WatchKit Extension.release.xcconfig */;
 			buildSettings = {
+				DEVELOPMENT_TEAM = T7839KRU5H;
 				INFOPLIST_FILE = "YapDatabaseTesting WatchKit Extension/Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = com.deusty.YapDatabaseTesting.watchkitapp.watchkitextension;
@@ -667,7 +605,7 @@
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
 				TARGETED_DEVICE_FAMILY = 4;
-				WATCHOS_DEPLOYMENT_TARGET = 2.2;
+				WATCHOS_DEPLOYMENT_TARGET = 3.0;
 			};
 			name = Release;
 		};
@@ -676,6 +614,7 @@
 			baseConfigurationReference = CEE3B58705FC379F2E1E336E /* Pods-watchOS-YapDatabaseTesting WatchKit App.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				DEVELOPMENT_TEAM = T7839KRU5H;
 				IBSC_MODULE = YapDatabaseTesting_WatchKit_Extension;
 				INFOPLIST_FILE = "YapDatabaseTesting WatchKit App/Info.plist";
 				PRODUCT_BUNDLE_IDENTIFIER = com.deusty.YapDatabaseTesting.watchkitapp;
@@ -683,7 +622,7 @@
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
 				TARGETED_DEVICE_FAMILY = 4;
-				WATCHOS_DEPLOYMENT_TARGET = 2.2;
+				WATCHOS_DEPLOYMENT_TARGET = 3.0;
 			};
 			name = Debug;
 		};
@@ -692,6 +631,7 @@
 			baseConfigurationReference = B08AA507FA5D2EEE7A75DDC7 /* Pods-watchOS-YapDatabaseTesting WatchKit App.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				DEVELOPMENT_TEAM = T7839KRU5H;
 				IBSC_MODULE = YapDatabaseTesting_WatchKit_Extension;
 				INFOPLIST_FILE = "YapDatabaseTesting WatchKit App/Info.plist";
 				PRODUCT_BUNDLE_IDENTIFIER = com.deusty.YapDatabaseTesting.watchkitapp;
@@ -699,7 +639,7 @@
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
 				TARGETED_DEVICE_FAMILY = 4;
-				WATCHOS_DEPLOYMENT_TARGET = 2.2;
+				WATCHOS_DEPLOYMENT_TARGET = 3.0;
 			};
 			name = Release;
 		};
@@ -708,7 +648,9 @@
 			baseConfigurationReference = EF39F31C30B59E1952C6B9B3 /* Pods-YapDatabaseTesting.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				DEVELOPMENT_TEAM = T7839KRU5H;
 				INFOPLIST_FILE = YapDatabaseTesting/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 11.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = com.deusty.YapDatabaseTesting;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -720,7 +662,9 @@
 			baseConfigurationReference = 747B643333389FA2CDBB467A /* Pods-YapDatabaseTesting.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				DEVELOPMENT_TEAM = T7839KRU5H;
 				INFOPLIST_FILE = YapDatabaseTesting/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 11.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = com.deusty.YapDatabaseTesting;
 				PRODUCT_NAME = "$(TARGET_NAME)";

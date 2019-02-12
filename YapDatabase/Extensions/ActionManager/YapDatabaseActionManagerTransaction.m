@@ -22,10 +22,13 @@
 
 - (NSArray *)actionItemsForCollectionKey:(YapCollectionKey *)ck
 {
-	__unsafe_unretained YapDatabaseActionManagerConnection *parentConnection =
-	  (YapDatabaseActionManagerConnection *)viewConnection;
+	__unsafe_unretained YapDatabaseActionManagerConnection *_connection =
+		(YapDatabaseActionManagerConnection *)parentConnection;
 	
-	id cached = [parentConnection->actionItemsCache objectForKey:ck];
+	__unsafe_unretained YapDatabaseActionManager *_parent =
+		(YapDatabaseActionManager *)_connection->parent;
+	
+	id cached = [_connection->actionItemsCache objectForKey:ck];
 	if (cached)
 	{
 		if (cached == [NSNull null])
@@ -37,15 +40,19 @@
 	id object = [databaseTransaction objectForKey:ck.key inCollection:ck.collection];
 	
 	NSArray<YapActionItem*> *actionItems = nil;
-	if ([object conformsToProtocol:@protocol(YapActionable)])
+	if (_parent->scheduler)
+	{
+		actionItems = _parent->scheduler(ck.collection, ck.key, object);
+	}
+	else if ([object conformsToProtocol:@protocol(YapActionable)])
 	{
 		actionItems = [[(id <YapActionable>)object yapActionItems] sortedArrayUsingSelector:@selector(compare:)];
 	}
 	
 	if (actionItems)
-		[parentConnection->actionItemsCache setObject:actionItems forKey:ck];
+		[_connection->actionItemsCache setObject:actionItems forKey:ck];
 	else
-		[parentConnection->actionItemsCache setObject:[NSNull null] forKey:ck];
+		[_connection->actionItemsCache setObject:[NSNull null] forKey:ck];
 	
 	return actionItems;
 }
@@ -63,35 +70,35 @@
  * YapDatabase extension hook.
  * This method is invoked by a YapDatabaseReadWriteTransaction as a post-operation-hook.
 **/
-- (void)handleUpdateObject:(id)object
-          forCollectionKey:(YapCollectionKey *)collectionKey
-              withMetadata:(id)metadata
-                     rowid:(int64_t)rowid
+- (void)didUpdateObject:(id)object
+       forCollectionKey:(YapCollectionKey *)collectionKey
+           withMetadata:(id)metadata
+                  rowid:(int64_t)rowid
 {
 	YDBLogAutoTrace();
 	
-	__unsafe_unretained YapDatabaseActionManagerConnection *parentConnection =
-	  (YapDatabaseActionManagerConnection *)viewConnection;
+	__unsafe_unretained YapDatabaseActionManagerConnection *amConnection =
+	  (YapDatabaseActionManagerConnection *)parentConnection;
 	
-	[parentConnection->actionItemsCache removeObjectForKey:collectionKey];
+	[amConnection->actionItemsCache removeObjectForKey:collectionKey];
 	
-	[super handleUpdateObject:object forCollectionKey:collectionKey withMetadata:metadata rowid:rowid];
+	[super didUpdateObject:object forCollectionKey:collectionKey withMetadata:metadata rowid:rowid];
 }
 
 /**
  * YapDatabase extension hook.
  * This method is invoked by a YapDatabaseReadWriteTransaction as a post-operation-hook.
 **/
-- (void)handleReplaceObject:(id)object forCollectionKey:(YapCollectionKey *)collectionKey withRowid:(int64_t)rowid
+- (void)didReplaceObject:(id)object forCollectionKey:(YapCollectionKey *)collectionKey withRowid:(int64_t)rowid
 {
 	YDBLogAutoTrace();
 	
-	__unsafe_unretained YapDatabaseActionManagerConnection *parentConnection =
-	  (YapDatabaseActionManagerConnection *)viewConnection;
+	__unsafe_unretained YapDatabaseActionManagerConnection *amConnection =
+	  (YapDatabaseActionManagerConnection *)parentConnection;
 	
-	[parentConnection->actionItemsCache removeObjectForKey:collectionKey];
+	[amConnection->actionItemsCache removeObjectForKey:collectionKey];
 	
-	[super handleReplaceObject:object forCollectionKey:collectionKey withRowid:rowid];
+	[super didReplaceObject:object forCollectionKey:collectionKey withRowid:rowid];
 }
 
 /**
@@ -101,16 +108,16 @@
  * Corresponds to the following method(s) in YapDatabaseReadWriteTransaction:
  * - touchObjectForKey:inCollection:collection:
 **/
-- (void)handleTouchObjectForCollectionKey:(YapCollectionKey *)collectionKey withRowid:(int64_t)rowid
+- (void)didTouchObjectForCollectionKey:(YapCollectionKey *)collectionKey withRowid:(int64_t)rowid
 {
 	YDBLogAutoTrace();
 	
-	__unsafe_unretained YapDatabaseActionManagerConnection *parentConnection =
-	  (YapDatabaseActionManagerConnection *)viewConnection;
+	__unsafe_unretained YapDatabaseActionManagerConnection *amConnection =
+	  (YapDatabaseActionManagerConnection *)parentConnection;
 	
-	[parentConnection->actionItemsCache removeObjectForKey:collectionKey];
+	[amConnection->actionItemsCache removeObjectForKey:collectionKey];
 	
-	[super handleTouchObjectForCollectionKey:collectionKey withRowid:rowid];
+	[super didTouchObjectForCollectionKey:collectionKey withRowid:rowid];
 }
 
 /**
@@ -120,67 +127,67 @@
  * Corresponds to the following method(s) in YapDatabaseReadWriteTransaction:
  * - touchRowForKey:inCollection:
 **/
-- (void)handleTouchRowForCollectionKey:(YapCollectionKey *)collectionKey withRowid:(int64_t)rowid
+- (void)didTouchRowForCollectionKey:(YapCollectionKey *)collectionKey withRowid:(int64_t)rowid
 {
 	YDBLogAutoTrace();
 	
-	__unsafe_unretained YapDatabaseActionManagerConnection *parentConnection =
-	  (YapDatabaseActionManagerConnection *)viewConnection;
+	__unsafe_unretained YapDatabaseActionManagerConnection *amConnection =
+	  (YapDatabaseActionManagerConnection *)parentConnection;
 	
-	[parentConnection->actionItemsCache removeObjectForKey:collectionKey];
+	[amConnection->actionItemsCache removeObjectForKey:collectionKey];
 	
-	[super handleTouchRowForCollectionKey:collectionKey withRowid:rowid];
+	[super didTouchRowForCollectionKey:collectionKey withRowid:rowid];
 }
 
 /**
  * YapDatabase extension hook.
  * This method is invoked by a YapDatabaseReadWriteTransaction as a post-operation-hook.
 **/
-- (void)handleRemoveObjectForCollectionKey:(YapCollectionKey *)collectionKey withRowid:(int64_t)rowid
+- (void)didRemoveObjectForCollectionKey:(YapCollectionKey *)collectionKey withRowid:(int64_t)rowid
 {
 	YDBLogAutoTrace();
 	
-	__unsafe_unretained YapDatabaseActionManagerConnection *parentConnection =
-	  (YapDatabaseActionManagerConnection *)viewConnection;
+	__unsafe_unretained YapDatabaseActionManagerConnection *amConnection =
+	  (YapDatabaseActionManagerConnection *)parentConnection;
 	
-	[parentConnection->actionItemsCache removeObjectForKey:collectionKey];
+	[amConnection->actionItemsCache removeObjectForKey:collectionKey];
 	
-	[super handleRemoveObjectForCollectionKey:collectionKey withRowid:rowid];
+	[super didRemoveObjectForCollectionKey:collectionKey withRowid:rowid];
 }
 
 /**
  * YapDatabase extension hook.
  * This method is invoked by a YapDatabaseReadWriteTransaction as a post-operation-hook.
 **/
-- (void)handleRemoveObjectsForKeys:(NSArray *)keys inCollection:(NSString *)collection withRowids:(NSArray *)rowids
+- (void)didRemoveObjectsForKeys:(NSArray *)keys inCollection:(NSString *)collection withRowids:(NSArray *)rowids
 {
 	YDBLogAutoTrace();
 	
-	__unsafe_unretained YapDatabaseActionManagerConnection *parentConnection =
-	  (YapDatabaseActionManagerConnection *)viewConnection;
+	__unsafe_unretained YapDatabaseActionManagerConnection *amConnection =
+	  (YapDatabaseActionManagerConnection *)parentConnection;
 	
 	for (NSString *key in keys)
 	{
-		[parentConnection->actionItemsCache removeObjectForKey:YapCollectionKeyCreate(collection, key)];
+		[amConnection->actionItemsCache removeObjectForKey:YapCollectionKeyCreate(collection, key)];
 	}
 	
-	[super handleRemoveObjectsForKeys:keys inCollection:collection withRowids:rowids];
+	[super didRemoveObjectsForKeys:keys inCollection:collection withRowids:rowids];
 }
 
 /**
  * YapDatabase extension hook.
  * This method is invoked by a YapDatabaseReadWriteTransaction as a post-operation-hook.
 **/
-- (void)handleRemoveAllObjectsInAllCollections
+- (void)didRemoveAllObjectsInAllCollections
 {
 	YDBLogAutoTrace();
 	
-	__unsafe_unretained YapDatabaseActionManagerConnection *parentConnection =
-	  (YapDatabaseActionManagerConnection *)viewConnection;
+	__unsafe_unretained YapDatabaseActionManagerConnection *amConnection =
+	  (YapDatabaseActionManagerConnection *)parentConnection;
 	
-	[parentConnection->actionItemsCache removeAllObjects];
+	[amConnection->actionItemsCache removeAllObjects];
 	
-	[super handleRemoveAllObjectsInAllCollections];
+	[super didRemoveAllObjectsInAllCollections];
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

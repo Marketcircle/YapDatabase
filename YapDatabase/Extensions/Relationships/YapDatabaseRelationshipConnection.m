@@ -36,7 +36,7 @@
 	sqlite3_stmt *enumerateDstFileURLWithSrcStatement;
 	sqlite3_stmt *enumerateDstFileURLWithSrcNameStatement;
 	sqlite3_stmt *enumerateDstFileURLWithNameStatement;
-	sqlite3_stmt *enumerateDstFileURLWithNameExcludingSrcStatement;
+	sqlite3_stmt *enumerateDstFileURLExcludingSrcStatement;
 	sqlite3_stmt *enumerateAllDstFileURLStatement;
 	sqlite3_stmt *enumerateForSrcStatement;
 	sqlite3_stmt *enumerateForDstStatement;
@@ -52,8 +52,8 @@
 	sqlite3_stmt *countForNameStatement;
 	sqlite3_stmt *countForSrcDstStatement;
 	sqlite3_stmt *countForSrcDstNameStatement;
-	sqlite3_stmt *countForSrcNameExcludingDstStatement;
-	sqlite3_stmt *countForDstNameExcludingSrcStatement;
+	sqlite3_stmt *countForSrcExcludingDstStatement;
+	sqlite3_stmt *countForDstExcludingSrcStatement;
 	sqlite3_stmt *removeAllStatement;
 	sqlite3_stmt *removeAllProtocolStatement;
 }
@@ -96,7 +96,7 @@
 	sqlite_finalize_null(&enumerateDstFileURLWithSrcStatement);
 	sqlite_finalize_null(&enumerateDstFileURLWithSrcNameStatement);
 	sqlite_finalize_null(&enumerateDstFileURLWithNameStatement);
-	sqlite_finalize_null(&enumerateDstFileURLWithNameExcludingSrcStatement);
+	sqlite_finalize_null(&enumerateDstFileURLExcludingSrcStatement);
 	sqlite_finalize_null(&enumerateAllDstFileURLStatement);
 	sqlite_finalize_null(&enumerateForSrcStatement);
 	sqlite_finalize_null(&enumerateForDstStatement);
@@ -112,8 +112,8 @@
 	sqlite_finalize_null(&countForNameStatement);
 	sqlite_finalize_null(&countForSrcDstStatement);
 	sqlite_finalize_null(&countForSrcDstNameStatement);
-	sqlite_finalize_null(&countForSrcNameExcludingDstStatement);
-	sqlite_finalize_null(&countForDstNameExcludingSrcStatement);
+	sqlite_finalize_null(&countForSrcExcludingDstStatement);
+	sqlite_finalize_null(&countForDstExcludingSrcStatement);
 	sqlite_finalize_null(&removeAllStatement);
 	sqlite_finalize_null(&removeAllProtocolStatement);
 }
@@ -499,7 +499,7 @@
 {
 	sqlite3_stmt **statement = &enumerateDstFileURLWithSrcStatement;
 	
-	sqlite3_stmt* (^CreateStatement)() = ^{
+	sqlite3_stmt* (^CreateStatement)(void) = ^{
 		
 		// The 'dst' column can store either an integer or a blob.
 		// If the edge has a destination key & collection,
@@ -518,7 +518,7 @@
 		NSString *string = [NSString stringWithFormat:
 		  @"SELECT \"rowid\", \"name\", \"dst\", \"rules\", \"manual\" FROM \"%@\""
 		  @" WHERE \"dst\" > %lld AND \"src\" = ?;",
-		  [parent tableName], INT64_MAX];
+		  [self->parent tableName], INT64_MAX];
 		
 		sqlite3_stmt *stmt = NULL;
 		[self prepareStatement:&stmt withString:string caller:_cmd];
@@ -552,7 +552,7 @@
 {
 	sqlite3_stmt **statement = &enumerateDstFileURLWithSrcNameStatement;
 	
-	sqlite3_stmt* (^CreateStatement)() = ^{
+	sqlite3_stmt* (^CreateStatement)(void) = ^{
 		
 		// The 'dst' column can store either an integer or a blob.
 		// If the edge has a destination key & collection,
@@ -571,7 +571,7 @@
 		NSString *string = [NSString stringWithFormat:
 		  @"SELECT \"rowid\", \"dst\", \"rules\", \"manual\" FROM \"%@\""
 		  @" WHERE \"dst\" > %lld AND \"src\" = ? AND \"name\" = ?;",
-		  [parent tableName], INT64_MAX];
+		  [self->parent tableName], INT64_MAX];
 		
 		sqlite3_stmt *stmt = NULL;
 		[self prepareStatement:&stmt withString:string caller:_cmd];
@@ -605,7 +605,7 @@
 {
 	sqlite3_stmt **statement = &enumerateDstFileURLWithNameStatement;
 	
-	sqlite3_stmt* (^CreateStatement)() = ^{
+	sqlite3_stmt* (^CreateStatement)(void) = ^{
 	
 		// The 'dst' column can store either an integer or a blob.
 		// If the edge has a destination key & collection,
@@ -624,7 +624,7 @@
 		NSString *string = [NSString stringWithFormat:
 		  @"SELECT \"rowid\", \"src\", \"dst\", \"rules\", \"manual\" FROM \"%@\""
 		  @" WHERE \"dst\" > %lld AND \"name\" = ?;",
-		  [parent tableName], INT64_MAX];
+		  [self->parent tableName], INT64_MAX];
 		
 		sqlite3_stmt *stmt = NULL;
 		[self prepareStatement:&stmt withString:string caller:_cmd];
@@ -654,11 +654,11 @@
 	return result;
 }
 
-- (sqlite3_stmt *)enumerateDstFileURLWithNameExcludingSrcStatement:(BOOL *)needsFinalizePtr
+- (sqlite3_stmt *)enumerateDstFileURLExcludingSrcStatement:(BOOL *)needsFinalizePtr
 {
-	sqlite3_stmt **statement = &enumerateDstFileURLWithNameExcludingSrcStatement;
+	sqlite3_stmt **statement = &enumerateDstFileURLExcludingSrcStatement;
 	
-	sqlite3_stmt* (^CreateStatement)() = ^{
+	sqlite3_stmt* (^CreateStatement)(void) = ^{
 	
 		// The 'dst' column can store either an integer or a blob.
 		// If the edge has a destination key & collection,
@@ -675,9 +675,9 @@
 		// For more information, see the documentation: http://www.sqlite.org/datatype3.html
 		
 		NSString *string = [NSString stringWithFormat:
-		  @"SELECT \"rowid\", \"src\", \"dst\", \"rules\", \"manual\" FROM \"%@\""
-		  @" WHERE \"dst\" > %lld AND \"src\" != ? AND \"name\" = ?;",
-		  [parent tableName], INT64_MAX];
+		  @"SELECT \"rowid\", \"name\", \"src\", \"dst\", \"rules\", \"manual\" FROM \"%@\""
+		  @" WHERE \"dst\" > %lld AND \"src\" != ?;",
+		  [self->parent tableName], INT64_MAX];
 		
 		sqlite3_stmt *stmt = NULL;
 		[self prepareStatement:&stmt withString:string caller:_cmd];
@@ -711,7 +711,7 @@
 {
 	sqlite3_stmt **statement = &enumerateAllDstFileURLStatement;
 	
-	sqlite3_stmt* (^CreateStatement)() = ^{
+	sqlite3_stmt* (^CreateStatement)(void) = ^{
 	
 		// The 'dst' column can store either an integer or a blob.
 		// If the edge has a destination key & collection,
@@ -729,7 +729,7 @@
 		
 		NSString *string = [NSString stringWithFormat:
 		  @"SELECT \"rowid\", \"name\", \"src\", \"dst\", \"rules\", \"manual\" FROM \"%@\" WHERE \"dst\" > %lld;",
-		  [parent tableName], INT64_MAX];
+		  [self->parent tableName], INT64_MAX];
 		
 		sqlite3_stmt *stmt = NULL;
 		[self prepareStatement:&stmt withString:string caller:_cmd];
@@ -763,11 +763,11 @@
 {
 	sqlite3_stmt **statement = &enumerateForSrcStatement;
 	
-	sqlite3_stmt* (^CreateStatement)() = ^{
+	sqlite3_stmt* (^CreateStatement)(void) = ^{
 		
 		NSString *string = [NSString stringWithFormat:
 		  @"SELECT \"rowid\", \"name\", \"dst\", \"rules\", \"manual\" FROM \"%@\" WHERE \"src\" = ?;",
-		  [parent tableName]];
+		  [self->parent tableName]];
 		
 		sqlite3_stmt *stmt = NULL;
 		[self prepareStatement:&stmt withString:string caller:_cmd];
@@ -801,11 +801,11 @@
 {
 	sqlite3_stmt **statement = &enumerateForDstStatement;
 	
-	sqlite3_stmt* (^CreateStatement)() = ^{
+	sqlite3_stmt* (^CreateStatement)(void) = ^{
 		
 		NSString *string = [NSString stringWithFormat:
 		  @"SELECT \"rowid\", \"name\", \"src\", \"rules\", \"manual\" FROM \"%@\" WHERE \"dst\" = ?;",
-		  [parent tableName]];
+		  [self->parent tableName]];
 		
 		sqlite3_stmt *stmt = NULL;
 		[self prepareStatement:&stmt withString:string caller:_cmd];
@@ -839,11 +839,11 @@
 {
 	sqlite3_stmt **statement = &enumerateForSrcNameStatement;
 	
-	sqlite3_stmt* (^CreateStatement)() = ^{
+	sqlite3_stmt* (^CreateStatement)(void) = ^{
 		
 		NSString *string = [NSString stringWithFormat:
 		  @"SELECT \"rowid\", \"dst\", \"rules\", \"manual\" FROM \"%@\" WHERE \"src\" = ? AND \"name\" = ?;",
-		  [parent tableName]];
+		  [self->parent tableName]];
 		
 		sqlite3_stmt *stmt = NULL;
 		[self prepareStatement:&stmt withString:string caller:_cmd];
@@ -877,11 +877,11 @@
 {
 	sqlite3_stmt **statement = &enumerateForDstNameStatement;
 	
-	sqlite3_stmt* (^CreateStatement)() = ^{
+	sqlite3_stmt* (^CreateStatement)(void) = ^{
 		
 		NSString *string = [NSString stringWithFormat:
 		  @"SELECT \"rowid\", \"src\", \"rules\", \"manual\" FROM \"%@\" WHERE \"dst\" = ? AND \"name\" = ?;",
-		  [parent tableName]];
+		  [self->parent tableName]];
 		
 		sqlite3_stmt *stmt = NULL;
 		[self prepareStatement:&stmt withString:string caller:_cmd];
@@ -915,11 +915,11 @@
 {
 	sqlite3_stmt **statement = &enumerateForNameStatement;
 	
-	sqlite3_stmt* (^CreateStatement)() = ^{
+	sqlite3_stmt* (^CreateStatement)(void) = ^{
 		
 		NSString *string = [NSString stringWithFormat:
 		  @"SELECT \"rowid\", \"src\", \"dst\", \"rules\", \"manual\" FROM \"%@\" WHERE \"name\" = ?;",
-		  [parent tableName]];
+		  [self->parent tableName]];
 		
 		sqlite3_stmt *stmt = NULL;
 		[self prepareStatement:&stmt withString:string caller:_cmd];
@@ -953,11 +953,11 @@
 {
 	NSParameterAssert(needsFinalizePtr != NULL);
 	
-	sqlite3_stmt* (^CreateStatement)() = ^{
+	sqlite3_stmt* (^CreateStatement)(void) = ^{
 		
 		NSString *string = [NSString stringWithFormat:
 		  @"SELECT \"rowid\", \"name\", \"rules\", \"manual\" FROM \"%@\" WHERE \"src\" = ? AND \"dst\" = ?;",
-		  [parent tableName]];
+		  [self->parent tableName]];
 		
 		sqlite3_stmt *stmt = NULL;
 		[self prepareStatement:&stmt withString:string caller:_cmd];
@@ -991,11 +991,11 @@
 {
 	sqlite3_stmt **statement = &enumerateForSrcDstNameStatement;
 	
-	sqlite3_stmt* (^CreateStatement)() = ^{
+	sqlite3_stmt* (^CreateStatement)(void) = ^{
 		
 		NSString *string = [NSString stringWithFormat:
 		  @"SELECT \"rowid\", \"rules\", \"manual\" FROM \"%@\" WHERE \"src\" = ? AND \"dst\" = ? AND \"name\" = ?;",
-		  [parent tableName]];
+		  [self->parent tableName]];
 		
 		sqlite3_stmt *stmt = NULL;
 		[self prepareStatement:&stmt withString:string caller:_cmd];
@@ -1025,13 +1025,13 @@
 	return result;
 }
 
-- (sqlite3_stmt *)countForSrcNameExcludingDstStatement
+- (sqlite3_stmt *)countForSrcExcludingDstStatement
 {
-	sqlite3_stmt **statement = &countForSrcNameExcludingDstStatement;
+	sqlite3_stmt **statement = &countForSrcExcludingDstStatement;
 	if (*statement == NULL)
 	{
 		NSString *string = [NSString stringWithFormat:
-		  @"SELECT COUNT(*) AS NumberOfRows FROM \"%@\" WHERE \"src\" = ? AND \"dst\" != ? AND \"name\" = ?;",
+		  @"SELECT COUNT(*) AS NumberOfRows FROM \"%@\" WHERE \"src\" = ? AND \"dst\" != ?;",
 		  [parent tableName]];
 		
 		[self prepareStatement:statement withString:string caller:_cmd];
@@ -1040,13 +1040,13 @@
 	return *statement;
 }
 
-- (sqlite3_stmt *)countForDstNameExcludingSrcStatement
+- (sqlite3_stmt *)countForDstExcludingSrcStatement
 {
-	sqlite3_stmt **statement = &countForDstNameExcludingSrcStatement;
+	sqlite3_stmt **statement = &countForDstExcludingSrcStatement;
 	if (*statement == NULL)
 	{
 		NSString *string = [NSString stringWithFormat:
-		  @"SELECT COUNT(*) AS NumberOfRows FROM \"%@\" WHERE \"dst\" = ? AND \"src\" != ? AND \"name\" = ?;",
+		  @"SELECT COUNT(*) AS NumberOfRows FROM \"%@\" WHERE \"dst\" = ? AND \"src\" != ?;",
 		  [parent tableName]];
 		
 		[self prepareStatement:statement withString:string caller:_cmd];

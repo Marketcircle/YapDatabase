@@ -223,6 +223,57 @@ typedef NSData *_Nonnull (^YapDatabaseCipherKeyBlock)(void);
  * to customize the page size of your encrypted database.
  **/
 @property (nonatomic, assign, readwrite) NSUInteger cipherPageSize;
+
+/**
+ * Set a block here that returns the salt (not the key) for the SQLCipher database.
+ *
+ * This salt that will be passed to SQLCipher via `PRAGMA cipher_salt`.
+ *
+ * This block allows you to fetch the salt from the keychain (or elsewhere)
+ * only when you need it, instead of persisting it in memory.
+ *
+ * You must use the 'YapDatabase/SQLCipher' subspec
+ * in your Podfile for this option to take effect.
+ *
+ * cipherSaltBlock will be ignored if you don't also set cipherKeyBlock and cipherUnencryptedHeaderLength.
+ *
+ * For more information, see comments in YapDatabaseCryptoUtils.h.
+ **/
+@property (nonatomic, copy, readwrite) YapDatabaseCipherKeyBlock cipherSaltBlock;
+
+/**
+ * Set a block here that returns the key spec (not the key) for the SQLCipher database.
+ *
+ * This key spec incorporates the "derived key" and the "salt".
+ *
+ * This block allows you to fetch the key spec from the keychain (or elsewhere)
+ * only when you need it, instead of persisting it in memory.
+ *
+ * You must use the 'YapDatabase/SQLCipher' subspec
+ * in your Podfile for this option to take effect.
+ *
+ * cipherKeySpecBlock will be ignored if you don't also set cipherUnencryptedHeaderLength.
+ *
+ * For more information, see comments in YapDatabaseCryptoUtils.h.
+ **/
+@property (nonatomic, copy, readwrite) YapDatabaseCipherKeyBlock cipherKeySpecBlock;
+
+/**
+ * If set, this many bytes at the start of the first page of the database will _NOT_
+ * be encrypted.
+ *
+ * This value will be passed to SQLCipher via `PRAGMA cipher_plaintext_header_size`.
+ *
+ * You must use the 'YapDatabase/SQLCipher' subspec
+ * in your Podfile for this option to take effect.
+ *
+ * cipherUnencryptedHeaderLength will be ignored if you don't also set
+ * ((cipherKeyBlock AND cipherSaltBlock) OR cipherKeySpecBlock).
+ *
+ * For more information, see comments in YapDatabaseCryptoUtils.h.
+ **/
+@property (nonatomic, assign, readwrite) NSUInteger cipherUnencryptedHeaderLength;
+
 #endif
 
 /**
@@ -255,7 +306,7 @@ typedef NSData *_Nonnull (^YapDatabaseCipherKeyBlock)(void);
  * unless you were benchmarking or stress testing your database system.
  * In which case you may notice this aggressive checkpoint as something of a "stutter" in the system.
  *
- * The default value is (1024 * 1024) (i.e. 1 MB)
+ * The default value is (1024 * 1024 * 4) (i.e. 4 MB)
  * 
  * Remember: This value is specified as a number of bytes. For example:
  * -   1 KB == 1024 * 1

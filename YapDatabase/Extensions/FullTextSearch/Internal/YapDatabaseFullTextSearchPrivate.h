@@ -9,7 +9,11 @@
 
 #import "YapMutationStack.h"
 
-#import "sqlite3.h"
+#ifdef SQLITE_HAS_CODEC
+  #import <SQLCipher/sqlite3.h>
+#else
+  #import "sqlite3.h"
+#endif
 
 /**
  * This version number is stored in the yap2 table.
@@ -43,6 +47,7 @@
 	
 	NSOrderedSet *columnNames;
 	NSDictionary *options;
+	NSString *ftsVersion;
 	NSString *versionTag;
 	
 	id columnNamesSharedKeySet;
@@ -77,6 +82,8 @@
 - (sqlite3_stmt *)removeRowidStatement;
 - (sqlite3_stmt *)removeAllStatement;
 - (sqlite3_stmt *)queryStatement;
+- (sqlite3_stmt *)bm25QueryStatement;
+- (sqlite3_stmt *)bm25QueryStatementWithWeights:(NSArray<NSNumber *> *)weights;
 - (sqlite3_stmt *)querySnippetStatement;
 - (sqlite3_stmt *)rowidQueryStatement;
 - (sqlite3_stmt *)rowidQuerySnippetStatement;
