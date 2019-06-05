@@ -626,6 +626,11 @@ static int connectionBusyHandler(void *ptr, int count) {
 
 - (void)dealloc
 {
+    [self close];
+}
+
+- (void)close
+{
 	YDBLogVerbose(@"Dealloc <%@ %p: databaseName=%@>", [self class], self, [databasePath lastPathComponent]);
 	
 	NSDictionary *userInfo = @{

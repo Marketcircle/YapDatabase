@@ -416,6 +416,14 @@ extern NSString *const YapDatabaseModifiedExternallyKey;
 **/
 @property (atomic, readonly) NSString *sqliteVersion;
 
+/**
+ * Closes the database and releases the lock on the database file. This will render this database
+ * instance inoperable. This is called by dealloc, and normally that should be sufficient, but in
+ * cases where the database object leaks it will prevent new instances from referencing a file at
+ * the same path. By calling close callers can free up the path so that it can be used again.
+ */
+- (void)close;
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #pragma mark Defaults
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
