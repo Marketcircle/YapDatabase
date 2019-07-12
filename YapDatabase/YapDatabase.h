@@ -346,6 +346,8 @@ extern NSString *const YapDatabaseModifiedExternallyKey;
 
 @property (nonatomic, copy, readonly) YapDatabaseOptions *options;
 
+@property (nonatomic, strong) dispatch_queue_t closeNotifcationQueue;
+    
 /**
  * The snapshot number is the internal synchronization state primitive for the database.
  * It's generally only useful for database internals,

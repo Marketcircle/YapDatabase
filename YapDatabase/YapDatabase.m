@@ -119,7 +119,8 @@ static int connectionBusyHandler(void *ptr, int count) {
 	
 	dispatch_queue_t internalQueue;
 	dispatch_queue_t checkpointQueue;
-	
+    dispatch_queue_t closeNotifcationQueue;
+    
 	YapDatabaseConnectionConfig *connectionDefaults;
 	
 	NSDictionary *registeredExtensions;
@@ -259,6 +260,8 @@ static int connectionBusyHandler(void *ptr, int count) {
 
 @synthesize metadataPreSanitizer = metadataPreSanitizer;
 @synthesize metadataPostSanitizer = metadataPostSanitizer;
+
+@synthesize closeNotifcationQueue = closeNotifcationQueue;
 
 @dynamic options;
 @dynamic sqliteVersion;
@@ -442,6 +445,8 @@ static int connectionBusyHandler(void *ptr, int count) {
 		databasePath = path;
 		options = inOptions ? [inOptions copy] : [[YapDatabaseOptions alloc] init];
 		
+        closeNotifcationQueue = dispatch_get_main_queue();
+    
 		__block BOOL isNewDatabaseFile = ![[NSFileManager defaultManager] fileExistsAtPath:databasePath];
 		
 		BOOL(^openConfigCreate)(void) = ^BOOL (void) { @autoreleasepool {
@@ -683,7 +688,7 @@ static int connectionBusyHandler(void *ptr, int count) {
 		dispatch_release(checkpointQueue);
 #endif
 	
-	dispatch_async(dispatch_get_main_queue(), ^{
+	dispatch_async(closeNotifcationQueue, ^{
 		
 		[[NSNotificationCenter defaultCenter] postNotification:notification];
 	});
