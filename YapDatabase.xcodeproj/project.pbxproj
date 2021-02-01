@@ -53,6 +53,8 @@
 		371A7BC01EF18B80004176EC /* YapDatabaseViewLocator.m in Sources */ = {isa = PBXBuildFile; fileRef = 371A7BBB1EF18B7B004176EC /* YapDatabaseViewLocator.m */; };
 		65580CA61BF36A020055E65C /* yap_vfs_shim.h in Headers */ = {isa = PBXBuildFile; fileRef = 65580CA41BF36A020055E65C /* yap_vfs_shim.h */; };
 		65580CA81BF36AA20055E65C /* yap_vfs_shim.h in Headers */ = {isa = PBXBuildFile; fileRef = 65580CA41BF36A020055E65C /* yap_vfs_shim.h */; };
+		92C0795525C4A23B0054A054 /* YapDatabaseTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92C0795425C4A23B0054A054 /* YapDatabaseTests.swift */; };
+		92C0795725C4A23B0054A054 /* YapDatabase.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DCF7C2BE1BCC8E870087ED39 /* YapDatabase.framework */; };
 		B93B30CB238966FC00710E07 /* YapDatabaseConnectionPool.h in Headers */ = {isa = PBXBuildFile; fileRef = B93B30C9238966FC00710E07 /* YapDatabaseConnectionPool.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		B93B30CC238966FC00710E07 /* YapDatabaseConnectionPool.m in Sources */ = {isa = PBXBuildFile; fileRef = B93B30CA238966FC00710E07 /* YapDatabaseConnectionPool.m */; };
 		B93B30CD2389670000710E07 /* YapDatabaseConnectionPool.h in Headers */ = {isa = PBXBuildFile; fileRef = B93B30C9238966FC00710E07 /* YapDatabaseConnectionPool.h */; settings = {ATTRIBUTES = (Public, ); }; };
@@ -1134,6 +1136,13 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		92C0795825C4A23B0054A054 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = DCF7C2A51BCC8E610087ED39 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DCF7C2BD1BCC8E870087ED39;
+			remoteInfo = "YapDatabase-iOS";
+		};
 		DC06EEBB1EFC3F300002CB40 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = DCF7C2A51BCC8E610087ED39 /* Project object */;
@@ -1262,6 +1271,9 @@
 		371A7BBA1EF18B7B004176EC /* YapDatabaseViewLocator.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = YapDatabaseViewLocator.h; sourceTree = "<group>"; };
 		371A7BBB1EF18B7B004176EC /* YapDatabaseViewLocator.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = YapDatabaseViewLocator.m; sourceTree = "<group>"; };
 		65580CA41BF36A020055E65C /* yap_vfs_shim.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = yap_vfs_shim.h; sourceTree = "<group>"; };
+		92C0795225C4A23B0054A054 /* YapDatabaseTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = YapDatabaseTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		92C0795425C4A23B0054A054 /* YapDatabaseTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YapDatabaseTests.swift; sourceTree = "<group>"; };
+		92C0795625C4A23B0054A054 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B93B30C9238966FC00710E07 /* YapDatabaseConnectionPool.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = YapDatabaseConnectionPool.h; sourceTree = "<group>"; };
 		B93B30CA238966FC00710E07 /* YapDatabaseConnectionPool.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = YapDatabaseConnectionPool.m; sourceTree = "<group>"; };
 		B93B30D32389670D00710E07 /* YapDatabaseConnectionProxy.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = YapDatabaseConnectionProxy.h; sourceTree = "<group>"; };
@@ -1592,6 +1604,14 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		92C0794F25C4A23B0054A054 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				92C0795725C4A23B0054A054 /* YapDatabase.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		DC1E7CFF1D80C901000721B8 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -1682,6 +1702,15 @@
 				371A7B871EF18AB0004176EC /* YapDatabaseAutoViewPrivate.h */,
 			);
 			path = Internal;
+			sourceTree = "<group>";
+		};
+		92C0795325C4A23B0054A054 /* YapDatabaseTests */ = {
+			isa = PBXGroup;
+			children = (
+				92C0795425C4A23B0054A054 /* YapDatabaseTests.swift */,
+				92C0795625C4A23B0054A054 /* Info.plist */,
+			);
+			path = YapDatabaseTests;
 			sourceTree = "<group>";
 		};
 		B93B3101238968C900710E07 /* Swift */ = {
@@ -2553,6 +2582,7 @@
 				DCAF524A1C4866CD00562C92 /* TestModuleMap-Shared */,
 				DC6266CA1D80D3E000557968 /* TestModuleMap-watchOS */,
 				DCBA239E24C0999F00ECE684 /* YapDatabaseSwift-macOS */,
+				92C0795325C4A23B0054A054 /* YapDatabaseTests */,
 				DCF7C2AF1BCC8E610087ED39 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -2569,6 +2599,7 @@
 				DC1E7D031D80C901000721B8 /* YapDatabase.framework */,
 				DC6266C91D80D3E000557968 /* TestModuleMap-watchOS.app */,
 				DC6266D51D80D3E000557968 /* TestModuleMap-watchOS Extension.appex */,
+				92C0795225C4A23B0054A054 /* YapDatabaseTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -3217,6 +3248,24 @@
 /* End PBXHeadersBuildPhase section */
 
 /* Begin PBXNativeTarget section */
+		92C0795125C4A23B0054A054 /* YapDatabaseTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 92C0795C25C4A23B0054A054 /* Build configuration list for PBXNativeTarget "YapDatabaseTests" */;
+			buildPhases = (
+				92C0794E25C4A23B0054A054 /* Sources */,
+				92C0794F25C4A23B0054A054 /* Frameworks */,
+				92C0795025C4A23B0054A054 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				92C0795925C4A23B0054A054 /* PBXTargetDependency */,
+			);
+			name = YapDatabaseTests;
+			productName = YapDatabaseTests;
+			productReference = 92C0795225C4A23B0054A054 /* YapDatabaseTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		DC1E7D021D80C901000721B8 /* YapDatabase-watchOS */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = DC1E7D0A1D80C901000721B8 /* Build configuration list for PBXNativeTarget "YapDatabase-watchOS" */;
@@ -3390,9 +3439,15 @@
 		DCF7C2A51BCC8E610087ED39 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
+				LastSwiftUpdateCheck = 1220;
 				LastUpgradeCheck = 1010;
 				ORGANIZATIONNAME = "Deusty LLC";
 				TargetAttributes = {
+					92C0795125C4A23B0054A054 = {
+						CreatedOnToolsVersion = 12.2;
+						DevelopmentTeam = GR26KTJYTV;
+						ProvisioningStyle = Automatic;
+					};
 					DC1E7D021D80C901000721B8 = {
 						CreatedOnToolsVersion = 7.3.1;
 					};
@@ -3445,11 +3500,19 @@
 				DCE7616B1D78B899009C83A0 /* TestModuleMap-tvOS */,
 				DC6266C81D80D3E000557968 /* TestModuleMap-watchOS */,
 				DC6266D41D80D3E000557968 /* TestModuleMap-watchOS Extension */,
+				92C0795125C4A23B0054A054 /* YapDatabaseTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		92C0795025C4A23B0054A054 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		DC1E7D011D80C901000721B8 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -3525,6 +3588,14 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		92C0794E25C4A23B0054A054 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				92C0795525C4A23B0054A054 /* YapDatabaseTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		DC1E7CFE1D80C901000721B8 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -4108,6 +4179,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		92C0795925C4A23B0054A054 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DCF7C2BD1BCC8E870087ED39 /* YapDatabase-iOS */;
+			targetProxy = 92C0795825C4A23B0054A054 /* PBXContainerItemProxy */;
+		};
 		DC06EEBC1EFC3F300002CB40 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = DCF7C2AD1BCC8E610087ED39 /* YapDatabase-macOS */;
@@ -4177,6 +4253,61 @@
 /* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
+		92C0795A25C4A23B0054A054 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = GR26KTJYTV;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				INFOPLIST_FILE = YapDatabaseTests/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 14.2;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @loader_path/Frameworks";
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.marketcircle.YapDatabaseTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		92C0795B25C4A23B0054A054 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = GR26KTJYTV;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				INFOPLIST_FILE = YapDatabaseTests/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 14.2;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @loader_path/Frameworks";
+				MTL_FAST_MATH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.marketcircle.YapDatabaseTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_OPTIMIZATION_LEVEL = "-Owholemodule";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 		DC1E7D081D80C901000721B8 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -4648,6 +4779,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		92C0795C25C4A23B0054A054 /* Build configuration list for PBXNativeTarget "YapDatabaseTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				92C0795A25C4A23B0054A054 /* Debug */,
+				92C0795B25C4A23B0054A054 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		DC1E7D0A1D80C901000721B8 /* Build configuration list for PBXNativeTarget "YapDatabase-watchOS" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
