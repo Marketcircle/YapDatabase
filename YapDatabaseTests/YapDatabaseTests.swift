@@ -47,7 +47,8 @@ class YapDatabaseTests: XCTestCase {
         XCTAssertNotNil(YapDatabaseTests.connection)
     }
 
-    // Issue #3824 Triggers a bug where deleting one object causes an edge to fire and
+    // Issue #3824 also logged as #453 and #274
+    // Triggers a bug where deleting one object causes an edge to fire and
     // delete an unrelated object. There are several versions of this test. The object
     // model for all of them is as follows:
     //
@@ -66,6 +67,10 @@ class YapDatabaseTests: XCTestCase {
     // this test the rowid is the correct value for the collection key, but the row should not be
     // deleted since it isn't the target of a relationship. I'm not sure if this is two similar,
     // but subtly different bugs, or if it is one bug and the rowid discrepency was a red herring.
+    //
+    // After doing some investigation it turns out that the issue is caused by the rowid for Unrelated
+    // being re-used by owner:2. This causes the relationship extension to mistake the deletion of
+    // unrelated:1 as being for owner:2, which triggers the deletion of property:3.
     func testEdgeBug() throws {
         let ownerCollection = "Owner"
         let propertyCollection = "Property"
